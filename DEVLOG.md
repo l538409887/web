@@ -51,6 +51,80 @@
 
 # 日志正文
 
+## 2026-11-27 · P30 · 部署配置（单机 + Docker）+ 可信代理
+
+**先说一个部署才会暴露的问题**
+
+代码里 `client_ip()` 原本**完全不读 `X-Forwarded-For`**，理由是它可被伪造。
+这个决定在直连场景是对的，但一旦挂到 Nginx 后面：
+
+> 所有请求的直连地址都是 `127.0.0.1`，
+> 按 IP 限流从「每人 150 次/分」退化成「**全站共用 150 次/分**」。
+
+表现为：用户越多，越多人莫名其妙被 429。而且这个错**不会报错**，只会静默失效。
+
+**修复：引入可信代理白名单**
+
+```
+浏览器(1.2.3.4) → Nginx(127.0.0.1) → 应用
+                  X-Real-IP: 1.2.3.4
+
+peer=127.0.0.1 ∈ TRUSTED_PROXIES  → 采用 1.2.3.4        ✅
+peer=8.8.8.8   ∉ TRUSTED_PROXIES  → 忽略 X-Real-IP      ✅（伪造无效）
+```
+
+- `TRUSTED_PROXIES` 支持**单 IP 与 CIDR**（Docker 网络是网段，不是固定 IP）
+- 优先读 `X-Real-IP`（本项目 Nginx 写入，单值不可追加），退化用 `X-Forwarded-For` 第一段
+- 用 `ipaddress` 解析，非法条目忽略而不是抛异常（配置写错不该让站点 500）
+
+新增 4 个用例覆盖：伪造头被忽略、可信代理采信、XFF 兜底、CIDR 网段。
+
+**部署产物**
+
+```
+deploy/
+├── nginx/novel-platform.conf    单机站点配置
+├── nginx/docker-web.conf        容器内配置（upstream 用服务名）
+├── systemd/novel-backend.service
+├── Dockerfile.backend           python:3.12-slim + 非 root 用户 + healthcheck
+├── Dockerfile.web               node:20 构建 → nginx:alpine 托管
+├── docker-compose.yml           MySQL 8 + 后端 + 前端，固定网段 172.28.0.0/16
+├── .env.docker.example
+└── README.md                    两种部署路径 + 8 条生产检查清单
+```
+
+**几个刻意的配置选择**
+
+| 选择 | 原因 |
+|---|---|
+| `--workers 1` | 限流与封禁状态在进程内存，多 worker 会让额度翻倍 |
+| Nginx `X-Real-IP $remote_addr` | 应用靠它还原真实 IP，缺了就等于没配白名单 |
+| 前端 API 用相对路径 `/api/v1` | 换域名不用重新构建前端 |
+| `assets/` 缓存 1 年、`index.html` 不缓存 | 发版后用户不会看到旧壳 |
+| MySQL 端口只映射 `127.0.0.1:3307` | 不把数据库暴露到外网 |
+| Docker 里用 root 连库 | 演示方便；README 明确写了生产要用 `00_create_user.sql` 的最小权限账号 |
+
+**验证**
+
+| 检查 | 结果 |
+|---|---|
+| `docker compose config --quiet` | 退出码 0（文件语义有效）|
+| YAML 结构解析 | 3 服务 / 3 卷 / 1 网络 / mysql 4 个挂载 |
+| compose 变量与 env 示例一致 | `MYSQL_ROOT_PASSWORD`、`SECRET_KEY`、`CORS_ORIGINS` 均已定义 |
+| 伪造 IP 测试 | 直连 8.8.8.8 + 伪造头 → 仍判定为 8.8.8.8 |
+| 可信代理测试 | 127.0.0.1 + X-Real-IP → 采信 1.2.3.4 |
+| CIDR 测试 | 172.28.0.5 命中 172.28.0.0/16 |
+| 测试套件 | 61 个用例全过 |
+| 站点 | /、/book/1、/rank/click 均 200 |
+
+**没验证的部分（如实说明）**
+
+Docker 守护进程未启动，**镜像没有真正构建过**。
+YAML 与 compose 语义已校验，但 `pip install` 在 python:3.12 上是否全部有 wheel、
+前端 `npm ci` 是否顺利，需要第一次 `up --build` 时确认。
+README 里已把首次启动的观察命令写清楚。
+
+---
 ## 2026-11-27 · P29 · 自动化测试（57 个用例）+ 修复 schema.sql 失真
 
 **先说最重要的发现**

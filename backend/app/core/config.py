@@ -31,6 +31,10 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
     RATE_LIMIT_ENABLED: bool = True
+    # 可信反向代理。只有直连地址命中该列表时，才采信 X-Real-IP / X-Forwarded-For。
+    # 部署在 Nginx 后面时必须配置，否则所有请求的来源 IP 都是 127.0.0.1，
+    # 按 IP 限流会退化成「全站共用一个额度」。
+    TRUSTED_PROXIES: str = "127.0.0.1,::1"
     LOG_DIR: str = "logs"
 
     STATIC_DIR: str = "static"

@@ -18,6 +18,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 
+from app.core.config import settings
+
 # ---------------- 限流参数（每分钟）----------------
 RULES = {
     # 分类: (每分钟上限, 突发容量)
@@ -115,15 +117,65 @@ def classify(path: str, method: str) -> str:
     return "read"
 
 
-def client_ip(request: Request) -> str:
-    """取客户端 IP。
+def _trusted_networks() -> list:
+    """把 TRUSTED_PROXIES 解析成网段列表。
 
-    这里只信任直连地址：反向代理场景应在 Nginx 层清洗
-    X-Forwarded-For，否则该头可被伪造用来绕过限流。
+    支持单 IP 与 CIDR 两种写法：
+        "127.0.0.1,::1"        —— 本机反向代理
+        "172.28.0.0/16"        —— Docker 自定义网络
+    解析失败的条目直接忽略（配置写错不应该让整个站点 500）。
     """
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
+    import ipaddress
+
+    raw = getattr(settings, "TRUSTED_PROXIES", "") or ""
+    networks = []
+    for entry in raw.split(","):
+        text = entry.strip()
+        if not text:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(text, strict=False))
+        except ValueError:
+            continue
+    return networks
+
+
+def _is_trusted(peer: str) -> bool:
+    import ipaddress
+
+    if not peer:
+        return False
+    try:
+        address = ipaddress.ip_address(peer)
+    except ValueError:
+        # 非 IP（例如测试客户端的 "testclient"）一律视为不可信
+        return False
+    return any(address in network for network in _trusted_networks())
+
+
+def client_ip(request: Request) -> str:
+    """取客户端 IP，兼顾「直连」与「反向代理」两种部署形态。
+
+    安全要点：
+        **只有直连地址本身是可信代理时，才采信转发头。**
+        否则任何人都能伪造 `X-Forwarded-For` 把自己的 IP 换掉，
+        限流、审计日志、封禁全部失效。
+
+    取法优先级：X-Real-IP（由本项目的 Nginx 配置写入，单值、不可追加）
+                > X-Forwarded-For 的第一段 > 直连地址。
+    """
+    peer = request.client.host if request.client and request.client.host else ""
+
+    if _is_trusted(peer):
+        real_ip = (request.headers.get("x-real-ip") or "").strip()
+        if real_ip:
+            return real_ip
+
+        forwarded = (request.headers.get("x-forwarded-for") or "").split(",")
+        if forwarded and forwarded[0].strip():
+            return forwarded[0].strip()
+
+    return peer or "unknown"
 
 
 def is_banned(ip: str) -> bool:

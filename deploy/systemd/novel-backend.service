@@ -1,0 +1,47 @@
+# =============================================================
+#  systemd 单元：后端 API
+#  放置：/etc/systemd/system/novel-backend.service
+#  启用：sudo systemctl daemon-reload
+#        sudo systemctl enable --now novel-backend
+#  查看：sudo systemctl status novel-backend
+#        sudo journalctl -u novel-backend -f
+# =============================================================
+
+[Unit]
+Description=Novel Platform API (FastAPI + Uvicorn)
+Documentation=file:/opt/novel-platform/README.md
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/novel-platform/backend
+
+# 用虚拟环境里的解释器，不依赖系统 Python
+Environment="PATH=/opt/novel-platform/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONDONTWRITEBYTECODE=1"
+
+# 注意：workers 不要开太大。限流与封禁状态在进程内存里，
+# 多 worker 会让每个进程各有一份额度，实际限流强度被放大 N 倍。
+ExecStart=/opt/novel-platform/backend/.venv/bin/uvicorn main:app \
+          --host 127.0.0.1 --port 8000 --workers 1 \
+          --proxy-headers --forwarded-allow-ips=127.0.0.1
+
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGINT
+
+# ---------- 加固 ----------
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+# 需要可写的只有日志与用户上传目录
+ReadWritePaths=/opt/novel-platform/backend/logs /opt/novel-platform/backend/static
+
+[Install]
+WantedBy=multi-user.target

@@ -63,3 +63,6 @@ desktop.ini
 # ---------- 临时 ----------
 .tmp/
 .pylibs/
+
+# 部署环境变量（含密码）
+deploy/.env.docker

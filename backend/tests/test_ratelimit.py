@@ -81,3 +81,60 @@ def test_limit_disabled_by_default(client):
     for _ in range(20):
         resp = client.post("/api/v1/auth/login", json=payload)
         assert resp.status_code != 429
+
+# ---------------- 可信代理与 IP 归属 ----------------
+
+from starlette.requests import Request  # noqa: E402
+
+
+def make_request(headers: dict, client=("127.0.0.1", 12345)) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "query_string": b"",
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "client": client,
+            "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+        }
+    )
+
+
+def test_direct_client_ignores_forward_headers(monkeypatch):
+    """直连地址不是可信代理时，转发头一律不采信（防伪造 IP 绕过限流）。"""
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", "10.0.0.1")
+    request = make_request(
+        {
+            "X-Real-IP": "1.2.3.4",
+            "X-Forwarded-For": "5.6.7.8, 9.9.9.9",
+        },
+        client=("203.0.113.7", 5000),
+    )
+    assert ratelimit.client_ip(request) == "203.0.113.7"
+
+
+def test_trusted_proxy_uses_real_ip(monkeypatch):
+    """可信代理转发时，采信 X-Real-IP。"""
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", "127.0.0.1")
+    request = make_request(
+        {"X-Real-IP": "1.2.3.4", "X-Forwarded-For": "5.6.7.8"},
+        client=("127.0.0.1", 5000),
+    )
+    assert ratelimit.client_ip(request) == "1.2.3.4"
+
+
+def test_trusted_proxy_falls_back_to_first_forwarded(monkeypatch):
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", "127.0.0.1")
+    request = make_request(
+        {"X-Forwarded-For": "5.6.7.8, 9.9.9.9"}, client=("127.0.0.1", 5000)
+    )
+    assert ratelimit.client_ip(request) == "5.6.7.8"
+
+
+def test_trusted_proxy_supports_cidr(monkeypatch):
+    """Docker 网络用网段配置，而不是单个 IP。"""
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", "172.28.0.0/16")
+    request = make_request({"X-Real-IP": "9.9.9.9"}, client=("172.28.0.5", 5000))
+    assert ratelimit.client_ip(request) == "9.9.9.9"

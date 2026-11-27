@@ -1,0 +1,110 @@
+# =============================================================
+#  一键启动：MySQL + 后端 + 前端
+#
+#  准备：
+#    cp deploy/.env.docker.example deploy/.env.docker
+#    按需修改密码
+#
+#  启动：
+#    cd deploy
+#    docker compose --env-file .env.docker up -d --build
+#
+#  访问：http://localhost:8080
+#  停止：docker compose --env-file .env.docker down
+#  清库：docker compose --env-file .env.docker down -v
+# =============================================================
+
+name: novel-platform
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: novel-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: novel_platform
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 首次启动按文件名顺序执行；schema 会自己 CREATE DATABASE
+      - ../db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ../db/demo_extra_books.sql:/docker-entrypoint-initdb.d/03-demo.sql:ro
+    ports:
+      # 只映射到本机，避免把数据库暴露到外网
+      - "127.0.0.1:3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - novel-net
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    image: novel-backend:latest
+    container_name: novel-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      APP_ENV: prod
+      SECRET_KEY: ${SECRET_KEY}
+      # 演示用 root 连接；真实部署请建最小权限账号（见 db/00_create_user.sql）
+      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD}@mysql:3306/novel_platform?charset=utf8mb4
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      # 前端容器的网段，用于从 X-Real-IP 还原真实来源 IP
+      TRUSTED_PROXIES: 172.28.0.0/16
+      RATE_LIMIT_ENABLED: "true"
+      TZ: Asia/Shanghai
+    volumes:
+      - backend_logs:/app/logs
+      - backend_static:/app/static
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - novel-net
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    image: novel-web:latest
+    container_name: novel-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    networks:
+      - novel-net
+
+volumes:
+  mysql_data:
+  backend_logs:
+  backend_static:
+
+networks:
+  novel-net:
+    driver: bridge
+    ipam:
+      config:
+        # 固定网段，与上面 TRUSTED_PROXIES 对应
+        - subnet: 172.28.0.0/16
