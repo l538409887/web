@@ -472,3 +472,104 @@ def admin_audit_paragraph(
         payload.audit_status,
     )
     return ok({"comment_id": comment_id, "audit_status": payload.audit_status})
+
+
+# ---------------- 敏感词库 ----------------
+class WordIn(BaseModel):
+    word: str
+    level: str = "review"
+    category: str = "其他"
+
+
+class WordPatch(BaseModel):
+    level: str | None = None
+    category: str | None = None
+    is_active: bool | None = None
+
+
+class WordTestIn(BaseModel):
+    text: str
+
+
+@router.get("/sensitive-words", summary="敏感词列表")
+def admin_list_words(
+    keyword: str | None = None,
+    level: str | None = None,
+    page: int = 1,
+    size: int = 20,
+    db: Session = Depends(get_db),
+):
+    from app.services import moderation_service
+
+    page = max(1, page)
+    size = min(max(1, size), 100)
+    rows, total = moderation_service.list_words(db, keyword, level, page, size)
+    pages = (total + size - 1) // size
+    return ok(
+        {
+            "list": [
+                {
+                    "id": r.id,
+                    "word": r.word,
+                    "level": r.level,
+                    "category": r.category,
+                    "is_active": bool(r.is_active),
+                    "created_at": r.created_at,
+                }
+                for r in rows
+            ],
+            "total": total,
+            "page": page,
+            "size": size,
+            "pages": pages,
+        }
+    )
+
+
+@router.post("/sensitive-words", summary="新增敏感词")
+def admin_create_word(
+    payload: WordIn,
+    admin: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.services import moderation_service
+
+    row = moderation_service.create_word(db, payload.word, payload.level, payload.category)
+    logger.bind(business=True).info("WORD_CREATE admin={} word={}", admin.id, row.id)
+    return ok({"id": row.id})
+
+
+@router.put("/sensitive-words/{word_id}", summary="修改敏感词")
+def admin_update_word(
+    word_id: int,
+    payload: WordPatch,
+    db: Session = Depends(get_db),
+):
+    from app.services import moderation_service
+
+    row = moderation_service.update_word(
+        db, word_id, **payload.model_dump(exclude_unset=True)
+    )
+    return ok({"id": row.id, "is_active": bool(row.is_active)})
+
+
+@router.delete("/sensitive-words/{word_id}", summary="删除敏感词")
+def admin_delete_word(word_id: int, db: Session = Depends(get_db)):
+    from app.services import moderation_service
+
+    moderation_service.delete_word(db, word_id)
+    return ok(None)
+
+
+@router.post("/sensitive-words/test", summary="检测一段文本")
+def admin_test_words(payload: WordTestIn, db: Session = Depends(get_db)):
+    from app.services import moderation_service
+
+    result = moderation_service.scan(db, payload.text)
+    return ok(
+        {
+            "blocked": result["blocked"],
+            "review": result["review"],
+            "would_block": bool(result["blocked"]),
+        }
+    )

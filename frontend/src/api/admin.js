@@ -18,6 +18,16 @@ export const getAdminComments = (params) => request.get('/admin/comments', { par
 export const updateCommentStatus = (id, status) =>
   request.put(`/admin/comments/${id}/status`, { status })
 
+export const getSensitiveWords = (params) =>
+  request.get('/admin/sensitive-words', { params })
+export const createSensitiveWord = (payload) =>
+  request.post('/admin/sensitive-words', payload)
+export const updateSensitiveWord = (id, payload) =>
+  request.put(`/admin/sensitive-words/${id}`, payload)
+export const deleteSensitiveWord = (id) => request.delete(`/admin/sensitive-words/${id}`)
+export const testSensitiveWords = (text) =>
+  request.post('/admin/sensitive-words/test', { text })
+
 export const getAdminChapters = (params) => request.get('/admin/chapters', { params })
 export const auditChapter = (id, auditStatus) =>
   request.put(`/admin/chapters/${id}/audit`, { audit_status: auditStatus })

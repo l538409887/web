@@ -426,4 +426,18 @@ CREATE TABLE `user_notice` (
   KEY `idx_user_read` (`user_id`, `is_read`, `created_at`),
   CONSTRAINT `fk_notice_user` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='站内通知';
+-- -------------------------------------------------------------
+-- 22. 敏感词库
+-- -------------------------------------------------------------
+CREATE TABLE `sensitive_word` (
+  `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `word`       VARCHAR(50)     NOT NULL,
+  `level`      VARCHAR(10)     NOT NULL DEFAULT 'review' COMMENT 'block直接拦截 review转人工',
+  `category`   VARCHAR(20)     NOT NULL DEFAULT '其他',
+  `is_active`  TINYINT         NOT NULL DEFAULT 1,
+  `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_word` (`word`),
+  KEY `idx_level` (`level`, `is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='敏感词库';
 -- =============================================================

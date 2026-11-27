@@ -73,7 +73,11 @@ def list_my_books(db: Session, user: SysUser, page: int = 1, size: int = 20):
 
 
 def create_book(db: Session, user: SysUser, payload) -> Book:
+    from app.services import moderation_service
+
     _check_category(db, payload.category_id)
+    moderation_service.enforce(db, payload.title, "书名")
+    moderation_service.enforce(db, payload.intro, "简介")
 
     book = Book(
         title=payload.title.strip(),
@@ -97,7 +101,13 @@ def create_book(db: Session, user: SysUser, payload) -> Book:
 
 
 def update_book(db: Session, user: SysUser, book_id: int, payload) -> Book:
+    from app.services import moderation_service
+
     book = _own_book(db, user, book_id)
+    if payload.title:
+        moderation_service.enforce(db, payload.title, "书名")
+    if payload.intro:
+        moderation_service.enforce(db, payload.intro, "简介")
 
     if payload.category_id is not None:
         _check_category(db, payload.category_id)
@@ -187,7 +197,10 @@ def _next_chapter_no(db: Session, book_id: int) -> int:
 
 
 def create_chapter(db: Session, user: SysUser, book_id: int, title: str, content: str) -> BookChapter:
+    from app.services import moderation_service
+
     _own_book(db, user, book_id)
+    moderation_service.enforce(db, content, "章节正文")
 
     chapter = BookChapter(
         book_id=book_id,
@@ -257,9 +270,12 @@ def preview_chapters(db: Session, user: SysUser, book_id: int, raw_text: str) ->
 def import_chapters(db: Session, user: SysUser, book_id: int, raw_text: str) -> dict:
     _own_book(db, user, book_id)
 
+    from app.services import moderation_service
+
     parts = split_chapters(raw_text)
     if not parts:
         raise BizError(1001, "没有解析到任何章节内容")
+    moderation_service.enforce(db, raw_text, "导入内容")
     if len(parts) > 500:
         raise BizError(1001, "一次最多导入 500 章")
 

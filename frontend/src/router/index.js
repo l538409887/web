@@ -114,6 +114,12 @@ const routes = [
         meta: { title: '评论管理' }
       },
       {
+        path: 'words',
+        name: 'AdminWords',
+        component: () => import('@/views/admin/Words.vue'),
+        meta: { title: '敏感词库' }
+      },
+      {
         path: 'chapters',
         name: 'AdminChapters',
         component: () => import('@/views/admin/Chapters.vue'),

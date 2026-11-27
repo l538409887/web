@@ -132,6 +132,11 @@ def list_my_comments(
 
 
 def create_comment(db: Session, user: SysUser, data) -> BookComment:
+    from app.services import moderation_service
+
+    # 命中 block 级直接拒绝；命中 review 级则置为待审核，不直接展示
+    hits = moderation_service.enforce(db, data.content, "评论")
+
     book = db.scalar(select(Book.id).where(Book.id == data.book_id, Book.is_online))
     if book is None:
         raise BizError(3001, "书籍不存在或已下架")
@@ -152,13 +157,16 @@ def create_comment(db: Session, user: SysUser, data) -> BookComment:
             raise BizError(1001, "评论不属于该书籍")
         chapter_id = parent.chapter_id
 
+    # 命中 review 级敏感词的评论进入待审核，暂不展示
+    comment_status = 0 if hits["review"] else 1
+
     comment = BookComment(
         book_id=data.book_id,
         chapter_id=chapter_id,
         user_id=user.id,
         parent_id=data.parent_id,
         content=data.content,
-        status=1,
+        status=comment_status,
     )
     db.add(comment)
     db.commit()

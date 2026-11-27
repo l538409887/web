@@ -293,6 +293,10 @@ def add_paragraph_comment(
     if len(text) > 300:
         raise BizError(5001, "间贴最多 300 字")
 
+    from app.services import moderation_service
+
+    hits = moderation_service.enforce(db, text, "间贴")
+
     parent = None
     if parent_id:
         parent = db.get(ParagraphComment, parent_id)
@@ -319,6 +323,8 @@ def add_paragraph_comment(
         user_id=user.id,
         content=text,
         status=1,
+        # 自动审核：未命中敏感词直接通过；命中 review 词留在待审核队列
+        audit_status=0 if hits["review"] else 1,
     )
     db.add(comment)
 
