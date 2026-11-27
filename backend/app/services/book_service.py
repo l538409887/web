@@ -84,9 +84,13 @@ def get_book(db: Session, book_id: int) -> Book | None:
 
 
 def incr_click(db: Session, book_id: int) -> None:
+    from app.services import stat_service
+
     db.execute(
         update(Book).where(Book.id == book_id).values(click_count=Book.click_count + 1)
     )
+    # 同时写当日流水，供周榜/月榜聚合
+    stat_service.bump(db, book_id, "click")
     db.commit()
 
 

@@ -58,6 +58,8 @@ export const reactParagraph = (id, reaction) =>
 export const deleteParagraphComment = (id) => request.delete(`/paragraph-comments/${id}`)
 
 export const getMonthlyRank = (limit = 10) => request.get('/rank/monthly', { params: { limit } })
+export const getPeriodRank = (metric, period, limit = 20) =>
+  request.get('/rank/period', { params: { metric, period, limit } })
 
 export const purchaseBook = (bookId) => request.post(`/books/${bookId}/purchase`)
 export const purchaseChapters = (bookId, chapterIds) =>

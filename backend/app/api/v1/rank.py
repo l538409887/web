@@ -25,3 +25,30 @@ def monthly_rank(limit: int = 10, db: Session = Depends(get_db)):
             for item in rows
         ]
     )
+
+
+@router.get("/period", summary="周榜 / 月榜（按日流水聚合）")
+def period_rank(
+    metric: str = "click",
+    period: str = "week",
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    from app.services import stat_service
+
+    limit = min(max(1, limit), 50)
+    rows = stat_service.period_top(db, metric=metric, period=period, limit=limit)
+    return ok(
+        {
+            "period": period,
+            "metric": metric,
+            "list": [
+                {
+                    "rank": index,
+                    "value": item["value"],
+                    "book": BookCard.model_validate(item["book"]),
+                }
+                for index, item in enumerate(rows, start=1)
+            ],
+        }
+    )

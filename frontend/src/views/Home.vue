@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { getBooks, getHome, getNotices } from '@/api'
+import { getBooks, getHome, getNotices, getPeriodRank } from '@/api'
 import BookCard from '@/components/BookCard.vue'
 import HomeCarousel from '@/components/HomeCarousel.vue'
 import HomeRankPanel from '@/components/HomeRankPanel.vue'
@@ -16,6 +16,7 @@ const loading = ref(true)
 const home = ref(null)
 const results = ref(null)
 const active = ref(0)
+const weeklyClick = ref([])
 
 const keyword = computed(() => (route.query.keyword || '').toString())
 
@@ -31,7 +32,7 @@ const current = computed(() => featured.value[active.value] || featured.value[0]
 const choicestCards = computed(() => choicest.value.slice(0, 3))
 const choicestGrid = computed(() => choicest.value.slice(3, 11))
 
-const clickRank = computed(() => home.value?.ranks?.click || [])
+const clickRank = computed(() => weeklyClick.value.length ? weeklyClick.value : home.value?.ranks?.click || [])
 const subscribeRank = computed(() => home.value?.ranks?.subscribe || [])
 const newRank = computed(() => home.value?.ranks?.new || [])
 
@@ -72,8 +73,17 @@ async function load() {
       results.value = await getBooks({ keyword: keyword.value, page: 1, size: 20 })
       home.value = null
     } else {
-      const [homeData, noticeList] = await Promise.all([getHome(), getNotices(5)])
+      const [homeData, noticeList, weekRank] = await Promise.all([
+        getHome(),
+        getNotices(5),
+        getPeriodRank('click', 'week', 10)
+      ])
       home.value = { ...homeData, notices: noticeList }
+      // 首页右侧「周点击榜」用真实的本周数据，而不是累计值
+      weeklyClick.value = (weekRank.list || []).map((item) => ({
+        ...item.book,
+        click_count: item.value
+      }))
       results.value = null
       active.value = 0
     }

@@ -200,6 +200,10 @@ def feed_watermelon(db: Session, user_id: int, book_id: int, count: int) -> dict
         update(Book).where(Book.id == book_id).values(watermelon_count=Book.watermelon_count + count)
     )
     db.add(BookWatermelonLog(user_id=user_id, book_id=book_id, count=count))
+
+    from app.services import stat_service
+
+    stat_service.bump(db, book_id, "recommend", count)
     db.commit()
 
     # 提交后重新查库，取真实余额与总数

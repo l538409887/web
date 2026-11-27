@@ -16,6 +16,7 @@ from app.models.follow import AuthorFollow
 from app.models.notice import SiteNotice, UserNotice
 from app.models.report import ContentReport
 from app.models.sensitive import SensitiveWord
+from app.models.stat import BookDailyStat
 from app.models.wallet import RechargeOrder, SignIn
 
 __all__ = [

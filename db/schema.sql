@@ -440,4 +440,19 @@ CREATE TABLE `sensitive_word` (
   UNIQUE KEY `uk_word` (`word`),
   KEY `idx_level` (`level`, `is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='敏感词库';
+-- -------------------------------------------------------------
+-- 23. 书籍每日统计（周榜 / 月榜数据源）
+-- -------------------------------------------------------------
+CREATE TABLE `book_daily_stat` (
+  `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `book_id`         BIGINT UNSIGNED NOT NULL,
+  `stat_date`       DATE            NOT NULL,
+  `clicks`          INT UNSIGNED    NOT NULL DEFAULT 0,
+  `collects`        INT UNSIGNED    NOT NULL DEFAULT 0,
+  `recommendations` INT UNSIGNED    NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_book_date` (`book_id`, `stat_date`),
+  KEY `idx_date` (`stat_date`),
+  CONSTRAINT `fk_stat_book` FOREIGN KEY (`book_id`) REFERENCES `book` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='书籍每日统计';
 -- =============================================================

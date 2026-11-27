@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { addShelf, feedWatermelon, getBooks, getMonthlyRank } from '@/api'
+import { addShelf, feedWatermelon, getBooks, getMonthlyRank, getPeriodRank } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { toast } from '@/utils/toast'
 import EmptyState from '@/components/EmptyState.vue'
@@ -13,11 +13,20 @@ const user = useUserStore()
 const loading = ref(true)
 const rows = ref([])
 const busyId = ref(0)
+const period = ref('week')
+
+const PERIOD_TABS = [
+  { key: 'week', label: '周榜' },
+  { key: 'month', label: '月榜' },
+  { key: 'all', label: '总榜' }
+]
+// 这三个榜有按天流水，可以切周期；新书榜/更新榜是另外的口径
+const PERIOD_KEYS = ['click', 'collect', 'watermelon']
 
 const DEFS = {
-  click: { label: '点击榜', field: 'click_count', tip: '按累计点击量排序' },
-  collect: { label: '收藏榜', field: 'collect_count', tip: '按被加入书架的次数排序' },
-  watermelon: { label: '推荐榜', field: 'watermelon_count', tip: '按读者投喂的西瓜数排序' },
+  click: { label: '点击榜', field: 'click_count', tip: '按点击量排序', unit: '次' },
+  collect: { label: '收藏榜', field: 'collect_count', tip: '按被加入书架的次数排序', unit: '次' },
+  watermelon: { label: '推荐榜', field: 'watermelon_count', tip: '按读者投喂的西瓜数排序', unit: '个' },
   subscribe: { label: '订阅榜', field: 'revenue_coin', tip: '按付费作品累计收入排序' },
   comment: { label: '吐槽榜', field: 'paragraph_comment_count', tip: '按间贴总数排序' },
   new: { label: '新书榜', field: null, tip: '按上架时间排序' },
@@ -97,6 +106,13 @@ async function load() {
     if (key === 'monthly') {
       const data = await getMonthlyRank(50)
       rows.value = data.map((item) => ({ ...item.book, _extra: `${formatCount(item.words)} 字` }))
+    } else if (PERIOD_KEYS.includes(key) && period.value !== 'all') {
+      const data = await getPeriodRank(key, period.value, 50)
+      const unit = current.value.unit || '次'
+      rows.value = data.list.map((item) => ({
+        ...item.book,
+        _extra: `${formatCount(item.value)} ${unit}`
+      }))
     } else {
       const data = await getBooks({ sort: key, page: 1, size: 50 })
       rows.value = data.list
@@ -108,7 +124,12 @@ async function load() {
   }
 }
 
-watch(() => route.params.key, load)
+function switchPeriod(next) {
+  period.value = next
+  load()
+}
+
+watch(() => route.params.key, () => { period.value = 'week'; load() })
 onMounted(load)
 </script>
 
@@ -135,7 +156,18 @@ onMounted(load)
         <div class="rd__head">
           <h1 class="rd__title">{{ current.label }}</h1>
           <span class="rd__tip">{{ current.tip }}</span>
-          <span class="rd__badge">总榜</span>
+          <div v-if="PERIOD_KEYS.includes(route.params.key)" class="rd__tabs">
+            <button
+              v-for="tab in PERIOD_TABS"
+              :key="tab.key"
+              class="rd__tab"
+              :class="{ 'rd__tab--on': period === tab.key }"
+              type="button"
+              @click="switchPeriod(tab.key)"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
         </div>
 
         <div v-if="loading" class="skeleton" style="height: 360px"></div>
@@ -283,6 +315,32 @@ onMounted(load)
 .rd__tip {
   font-size: 12px;
   color: var(--c-text-muted);
+}
+
+.rd__tabs {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.rd__tab {
+  padding: 4px 14px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 14px;
+  background: #fff;
+  font-size: 12px;
+  color: var(--c-text-secondary);
+}
+
+.rd__tab:hover {
+  border-color: var(--c-primary);
+  color: var(--c-primary);
+}
+
+.rd__tab--on {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: #fff;
 }
 
 .rd__badge {

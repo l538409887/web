@@ -26,6 +26,9 @@ def add_to_shelf(db: Session, user_id: int, book_id: int) -> None:
     db.execute(
         update(Book).where(Book.id == book_id).values(collect_count=Book.collect_count + 1)
     )
+    from app.services import stat_service
+
+    stat_service.bump(db, book_id, "collect")
     db.commit()
 
 
@@ -43,6 +46,9 @@ def remove_from_shelf(db: Session, user_id: int, book_id: int) -> None:
         .where(Book.id == book_id, Book.collect_count > 0)
         .values(collect_count=Book.collect_count - 1)
     )
+    from app.services import stat_service
+
+    stat_service.bump(db, book_id, "collect", -1)
     db.commit()
 
 
