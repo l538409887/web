@@ -70,15 +70,24 @@ def get_chapter_detail(db: Session, chapter_id: int, user_id: int | None = None)
         .limit(1)
     )
 
+    content = chapter.content
+
+    # 付费作品的正文嵌入零宽水印，用于溯源泄露
+    if book.is_paid == 1 and user_id:
+        from app.core import watermark
+
+        content = watermark.embed(content, user_id)
+
     return {
         "id": chapter.id,
         "book_id": chapter.book_id,
         "book_title": book.title,
         "chapter_no": chapter.chapter_no,
         "title": chapter.title,
-        "content": chapter.content,
+        "content": content,
         "word_count": chapter.word_count,
         "prev_id": prev_id,
         "next_id": next_id,
         "is_collected": False,
+        "is_paid": book.is_paid == 1,
     }

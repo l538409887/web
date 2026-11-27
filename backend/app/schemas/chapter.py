@@ -11,6 +11,7 @@ class ChapterBrief(APIModel):
     locked: bool = False
     price_coin: int = 0
     chapter_price: int = 0
+    is_paid: bool = False
 
 
 class ChapterDetail(APIModel):
@@ -27,3 +28,4 @@ class ChapterDetail(APIModel):
     locked: bool = False
     price_coin: int = 0
     chapter_price: int = 0
+    is_paid: bool = False
