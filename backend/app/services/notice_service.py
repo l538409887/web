@@ -50,11 +50,19 @@ def _validate(title: str, category: str) -> tuple[str, str]:
     return text, cat
 
 
-def create(db: Session, title: str, content: str, category: str, is_top: bool) -> SiteNotice:
+def create(
+    db: Session,
+    title: str,
+    content: str,
+    category: str,
+    is_top: bool,
+    cover: str = "",
+) -> SiteNotice:
     text, cat = _validate(title, category)
     notice = SiteNotice(
         title=text,
         content=(content or "").strip()[:500],
+        cover=(cover or "").strip()[:200],
         category=cat,
         is_top=1 if is_top else 0,
         status=1,
@@ -78,6 +86,8 @@ def update(db: Session, notice_id: int, payload: dict) -> SiteNotice:
         notice.category = cat
     if "content" in payload:
         notice.content = (payload.get("content") or "").strip()[:500]
+    if "cover" in payload:
+        notice.cover = (payload.get("cover") or "").strip()[:200]
     if "is_top" in payload:
         notice.is_top = 1 if payload.get("is_top") else 0
     if "status" in payload:

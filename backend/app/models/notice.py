@@ -14,6 +14,7 @@ class SiteNotice(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     title: Mapped[str] = mapped_column(String(120))
     content: Mapped[str] = mapped_column(String(500), default="")
+    cover: Mapped[str] = mapped_column(String(200), default="")
     category: Mapped[str] = mapped_column(String(20), default="公告")
     is_top: Mapped[int] = mapped_column(TINYINT, default=0)
     status: Mapped[int] = mapped_column(TINYINT, default=1)

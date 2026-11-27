@@ -19,6 +19,7 @@ def list_notices(limit: int = 6, db: Session = Depends(get_db)):
                 "id": row.id,
                 "title": row.title,
                 "content": row.content,
+                "cover": row.cover,
                 "category": row.category,
                 "is_top": bool(row.is_top),
                 "created_at": row.created_at,

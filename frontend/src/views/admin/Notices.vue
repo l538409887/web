@@ -11,7 +11,7 @@ const query = reactive({ status: null, page: 1, size: 10 })
 
 const dialog = ref(false)
 const editing = ref(null)
-const form = reactive({ title: '', content: '', category: '公告', is_top: false })
+const form = reactive({ title: '', content: '', cover: '', category: '公告', is_top: false })
 const saving = ref(false)
 
 const categories = ['公告', '活动', '更新']
@@ -37,6 +37,7 @@ function openCreate() {
   editing.value = null
   form.title = ''
   form.content = ''
+  form.cover = ''
   form.category = '公告'
   form.is_top = false
   dialog.value = true
@@ -46,6 +47,7 @@ function openEdit(row) {
   editing.value = row
   form.title = row.title
   form.content = row.content
+  form.cover = row.cover || ''
   form.category = row.category
   form.is_top = row.is_top
   dialog.value = true
@@ -128,6 +130,12 @@ onMounted(load)
           {{ row.title }}
         </template>
       </el-table-column>
+      <el-table-column label="封面" width="80">
+        <template #default="{ row }">
+          <img v-if="row.cover" :src="row.cover" class="thumb" alt="" />
+          <span v-else class="thumb thumb--none">无</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="content" label="正文" min-width="200" show-overflow-tooltip />
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
@@ -170,6 +178,9 @@ onMounted(load)
         <el-form-item label="置顶">
           <el-switch v-model="form.is_top" />
         </el-form-item>
+        <el-form-item label="封面图">
+          <el-input v-model="form.cover" placeholder="如 /covers/c1.jpg，留空则显示纯文字" />
+        </el-form-item>
         <el-form-item label="正文">
           <el-input v-model="form.content" type="textarea" :rows="5" maxlength="500" show-word-limit />
         </el-form-item>
@@ -204,6 +215,21 @@ onMounted(load)
 .pager {
   margin-top: 16px;
   justify-content: flex-end;
+}
+
+.thumb {
+  width: 36px;
+  height: 48px;
+  border-radius: 3px;
+  object-fit: cover;
+  display: inline-block;
+}
+
+.thumb--none {
+  font-size: 12px;
+  color: #c0c0c0;
+  text-align: center;
+  line-height: 48px;
 }
 
 .top {

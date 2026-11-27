@@ -369,6 +369,7 @@ CREATE TABLE `site_notice` (
   `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `title`      VARCHAR(120)    NOT NULL                COMMENT '标题',
   `content`    VARCHAR(500)    NOT NULL DEFAULT ''     COMMENT '正文',
+  `cover`      VARCHAR(200)    NOT NULL DEFAULT ''     COMMENT '封面图URL',
   `category`   VARCHAR(20)     NOT NULL DEFAULT '公告' COMMENT '公告/活动/更新',
   `is_top`     TINYINT         NOT NULL DEFAULT 0      COMMENT '0普通 1置顶',
   `status`     TINYINT         NOT NULL DEFAULT 1      COMMENT '1显示 0隐藏',

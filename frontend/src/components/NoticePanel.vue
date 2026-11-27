@@ -35,10 +35,15 @@ function close() {
 
     <ul v-if="items.length" class="np__list">
       <li v-for="item in items" :key="item.id" class="np__item" @click="open(item)">
-        <span class="np__cat" :style="{ color: catColor(item.category) }">
-          {{ item.category }}
-        </span>
-        <span class="np__text">{{ item.title }}</span>
+        <img v-if="item.cover" class="np__thumb" :src="item.cover" :alt="item.title" />
+        <div class="np__body">
+          <div class="np__row">
+            <span class="np__cat" :style="{ color: catColor(item.category) }">
+              {{ item.category }}
+            </span>
+            <span class="np__text">{{ item.title }}</span>
+          </div>
+        </div>
       </li>
     </ul>
     <p v-else class="np__empty">暂无公告</p>
@@ -56,7 +61,10 @@ function close() {
             </div>
             <button class="ntc__close" type="button" @click="close">✕</button>
           </header>
-          <div class="ntc__body">{{ active.content || '暂无详细内容。' }}</div>
+          <div class="ntc__body">
+            <img v-if="active.cover" class="ntc__cover" :src="active.cover" :alt="active.title" />
+            {{ active.content || '暂无详细内容。' }}
+          </div>
         </div>
       </div>
     </Teleport>
@@ -117,6 +125,24 @@ function close() {
 
 .np__item:hover .np__text {
   color: #ff85a8;
+}
+
+.np__thumb {
+  width: 46px;
+  height: 60px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.np__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.np__row {
+  display: flex;
+  gap: 8px;
 }
 
 .np__cat {
@@ -200,6 +226,15 @@ function close() {
   background: transparent;
   font-size: 15px;
   color: #999;
+}
+
+.ntc__cover {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
 }
 
 .ntc__body {

@@ -287,6 +287,7 @@ def update_paragraph_status(
 class NoticeIn(BaseModel):
     title: str
     content: str = ""
+    cover: str = ""
     category: str = "公告"
     is_top: bool = False
 
@@ -294,6 +295,7 @@ class NoticeIn(BaseModel):
 class NoticePatch(BaseModel):
     title: str | None = None
     content: str | None = None
+    cover: str | None = None
     category: str | None = None
     is_top: bool | None = None
     status: bool | None = None
@@ -319,6 +321,7 @@ def admin_list_notices(
                     "id": r.id,
                     "title": r.title,
                     "content": r.content,
+                    "cover": r.cover,
                     "category": r.category,
                     "is_top": bool(r.is_top),
                     "status": r.status,
@@ -342,7 +345,9 @@ def admin_create_notice(
 ):
     from app.services import notice_service
 
-    row = notice_service.create(db, payload.title, payload.content, payload.category, payload.is_top)
+    row = notice_service.create(
+        db, payload.title, payload.content, payload.category, payload.is_top, payload.cover
+    )
     logger.bind(business=True).info("NOTICE_CREATE admin={} id={}", admin.id, row.id)
     return ok({"id": row.id})
 

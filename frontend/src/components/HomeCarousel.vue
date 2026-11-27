@@ -19,22 +19,8 @@ function hueOf(text) {
   return h
 }
 
-// 首页轮播用的插画（放到 frontend/public/banners/ 下，按顺序循环使用）
-const ART = [
-  '/banners/b1.jpg',
-  '/banners/b2.jpg',
-  '/banners/b3.jpg',
-  '/banners/b4.jpg',
-  '/banners/b5.jpg'
-]
-
-// 插画按原尺寸展示（源图只有 378px 宽，放大铺满必糊），
-// 所以底图改用渐变色块，插画作为一张小卡片放在右侧
-function artOf(idx) {
-  if (!ART.length) return ''
-  return ART[idx % ART.length]
-}
-
+// 轮播图完全由数据驱动：书籍有 cover 就用 cover，没有则退化为书名哈希生成的渐变。
+// 底图用渐变色块（源图分辨率有限，铺满会糊），封面作为一张小卡片放在右侧。
 function washStyle(book) {
   const h = hueOf(book.title)
   return {
@@ -92,8 +78,8 @@ onBeforeUnmount(stop)
       <div class="car__track" :style="{ transform: `translateX(-${index * 100}%)` }">
         <div v-for="(book, i) in items" :key="book.id" class="car__slide">
           <div class="car__wash" :style="washStyle(book)"></div>
-          <div class="car__art">
-            <img :src="artOf(i)" :alt="book.title" />
+          <div v-if="book.cover" class="car__art">
+            <img :src="book.cover" :alt="book.title" />
           </div>
 
           <div class="car__content">
