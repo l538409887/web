@@ -2,6 +2,7 @@
 from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -56,6 +57,17 @@ class ParagraphComment(Base):
     report_count: Mapped[int] = mapped_column(Integer, default=0)
     reply_count: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[int] = mapped_column(TINYINT, default=1)
+    audit_status: Mapped[int] = mapped_column(TINYINT, default=0)
+    @hybrid_property
+    def is_visible(self) -> bool:
+        """展示中 = 未隐藏 且 未被驳回（待审核仍展示，先发后审）。"""
+        return self.status == 1 and self.audit_status != 2
+
+    @is_visible.expression
+    def is_visible(cls):
+        from sqlalchemy import and_
+
+        return and_(cls.status == 1, cls.audit_status != 2)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

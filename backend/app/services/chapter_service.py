@@ -10,7 +10,7 @@ def list_chapters(
     db: Session, book_id: int, *, page: int = 1, size: int = 500, order: str = "asc"
 ) -> tuple[list[BookChapter], int]:
     base = select(BookChapter).where(
-        BookChapter.book_id == book_id, BookChapter.status == 1
+        BookChapter.book_id == book_id, BookChapter.is_visible
     )
     total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
 
@@ -23,11 +23,11 @@ def list_chapters(
 
 def get_chapter_detail(db: Session, chapter_id: int, user_id: int | None = None) -> dict | None:
     chapter = db.get(BookChapter, chapter_id)
-    if chapter is None or chapter.status != 1:
+    if chapter is None or not chapter.is_visible:
         return None
 
     book = db.get(Book, chapter.book_id)
-    if book is None or book.audit_status != 1:
+    if book is None or not book.is_online:
         return None
 
     from app.services.interaction_service import calc_chapter_price, can_read_chapter
@@ -53,7 +53,7 @@ def get_chapter_detail(db: Session, chapter_id: int, user_id: int | None = None)
         select(BookChapter.id)
         .where(
             BookChapter.book_id == chapter.book_id,
-            BookChapter.status == 1,
+            BookChapter.is_visible,
             BookChapter.chapter_no < chapter.chapter_no,
         )
         .order_by(BookChapter.chapter_no.desc())
@@ -63,7 +63,7 @@ def get_chapter_detail(db: Session, chapter_id: int, user_id: int | None = None)
         select(BookChapter.id)
         .where(
             BookChapter.book_id == chapter.book_id,
-            BookChapter.status == 1,
+            BookChapter.is_visible,
             BookChapter.chapter_no > chapter.chapter_no,
         )
         .order_by(BookChapter.chapter_no.asc())

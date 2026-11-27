@@ -34,7 +34,7 @@ def list_books(
     page: int = 1,
     size: int = 20,
 ) -> tuple[list[Book], int]:
-    conditions = [Book.audit_status == 1]
+    conditions = [Book.is_online]
     join_author = False
 
     if category_id:
@@ -79,7 +79,7 @@ def list_books(
 
 
 def get_book(db: Session, book_id: int) -> Book | None:
-    stmt = select(Book).where(Book.id == book_id, Book.audit_status == 1)
+    stmt = select(Book).where(Book.id == book_id, Book.is_online)
     return db.scalars(stmt).first()
 
 
@@ -143,7 +143,7 @@ def list_categories(db: Session) -> list[dict]:
         )
         .outerjoin(
             Book,
-            (Book.category_id == BookCategory.id) & (Book.audit_status == 1),
+            (Book.category_id == BookCategory.id) & (Book.is_online),
         )
         .group_by(BookCategory.id, BookCategory.name, BookCategory.sort)
         .order_by(BookCategory.sort.asc())

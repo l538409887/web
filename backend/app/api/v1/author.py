@@ -206,3 +206,25 @@ def set_paid(
         book.price_coin,
     )
     return ok({"book_id": book.id, "is_paid": bool(book.is_paid), "price_coin": book.price_coin})
+
+
+@router.post("/books/{book_id}/submit", summary="提交作品审核")
+def submit_book(
+    book_id: int,
+    user: SysUser = Depends(AUTHOR),
+    db: Session = Depends(get_db),
+):
+    book = author_service.submit_book(db, user, book_id)
+    logger.bind(business=True).info("BOOK_SUBMIT author={} book={}", user.id, book_id)
+    return ok({"id": book.id, "audit_status": book.audit_status})
+
+
+@router.post("/books/{book_id}/apply-shelf", summary="申请上架")
+def apply_shelf(
+    book_id: int,
+    user: SysUser = Depends(AUTHOR),
+    db: Session = Depends(get_db),
+):
+    book = author_service.apply_shelf(db, user, book_id)
+    logger.bind(business=True).info("BOOK_APPLY_SHELF author={} book={}", user.id, book_id)
+    return ok({"id": book.id, "shelf_status": book.shelf_status})

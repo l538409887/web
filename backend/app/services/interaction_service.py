@@ -109,7 +109,7 @@ def set_paid(db: Session, user: SysUser, book_id: int, is_paid: bool) -> Book:
 
 def buy_book(db: Session, user_id: int, book_id: int) -> dict:
     book = db.get(Book, book_id)
-    if book is None or book.audit_status != 1:
+    if book is None or not book.is_online:
         raise BizError(3001, "书籍不存在或已下架")
     if book.is_paid != 1:
         raise BizError(1001, "这本书是免费的，无需购买")
@@ -162,7 +162,7 @@ def feed_watermelon(db: Session, user_id: int, book_id: int, count: int) -> dict
     if count < 1 or count > MAX_FEED_PER_TIME:
         raise BizError(1001, f"每次可投喂 1~{MAX_FEED_PER_TIME} 个西瓜")
 
-    book = db.scalar(select(Book).where(Book.id == book_id, Book.audit_status == 1))
+    book = db.scalar(select(Book).where(Book.id == book_id, Book.is_online))
     if book is None:
         raise BizError(3001, "书籍不存在或已下架")
 
@@ -245,7 +245,7 @@ def list_paragraph_comments(db: Session, chapter_id: int) -> dict:
     rows = list(
         db.scalars(
             select(ParagraphComment).where(
-                ParagraphComment.chapter_id == chapter_id, ParagraphComment.status == 1
+                ParagraphComment.chapter_id == chapter_id, ParagraphComment.is_visible
             )
         ).all()
     )
@@ -413,7 +413,7 @@ def react_paragraph_comment(
         raise BizError(1001, "reaction 只能是 1 赞 / 2 踩（举报请走 /reports）")
 
     comment = db.get(ParagraphComment, comment_id)
-    if comment is None or comment.status != 1:
+    if comment is None or not comment.is_visible:
         raise BizError(1004, "间贴不存在")
 
     existing = db.scalar(
@@ -499,7 +499,7 @@ def monthly_update_rank(db: Session, limit: int = 10) -> list[dict]:
     books = {
         b.id: b
         for b in db.scalars(
-            select(Book).where(Book.id.in_(book_ids), Book.audit_status == 1)
+            select(Book).where(Book.id.in_(book_ids), Book.is_online)
         ).all()
     }
 
@@ -524,12 +524,15 @@ def admin_list_paragraph_comments(
     *,
     status: int | None = None,
     only_reported: bool = False,
+    audit_status: int | None = None,
     page: int = 1,
     size: int = 20,
 ) -> tuple[list[dict], int]:
     conditions = []
     if status is not None:
         conditions.append(ParagraphComment.status == status)
+    if audit_status is not None:
+        conditions.append(ParagraphComment.audit_status == audit_status)
     if only_reported:
         conditions.append(ParagraphComment.report_count > 0)
 
@@ -657,7 +660,7 @@ def buy_chapters(
     db: Session, user_id: int, book_id: int, chapter_ids: list[int]
 ) -> dict:
     book = db.get(Book, book_id)
-    if book is None or book.audit_status != 1:
+    if book is None or not book.is_online:
         raise BizError(3001, "书籍不存在或已下架")
     if book.is_paid != 1:
         raise BizError(1001, "这本书是免费的，无需购买")
@@ -727,3 +730,51 @@ def buy_chapters(
         "coin": total,
         "balance": int(balance),
     }
+
+def set_paragraph_audit(db: Session, comment_id: int, audit_status: int) -> None:
+    """间贴审核：0 待审核 / 1 通过 / 2 驳回。驳回后前台不再展示。"""
+    if audit_status not in (0, 1, 2):
+        raise BizError(1001, "audit_status 只能是 0待审核 / 1通过 / 2驳回")
+
+    comment = db.get(ParagraphComment, comment_id)
+    if comment is None:
+        raise BizError(1004, "间贴不存在")
+
+    comment.audit_status = audit_status
+    if audit_status == 2:
+        # 驳回等同隐藏，书籍间贴计数一并减少（仅顶层）
+        if comment.status == 1 and comment.parent_id is None:
+            db.execute(
+                update(Book)
+                .where(Book.id == comment.book_id, Book.paragraph_comment_count > 0)
+                .values(paragraph_comment_count=Book.paragraph_comment_count - 1)
+            )
+        comment.status = 0
+    db.commit()
+
+
+def list_paragraph_comments_admin(
+    db: Session,
+    *,
+    audit_status: int | None = None,
+    page: int = 1,
+    size: int = 20,
+):
+    """后台间贴审核队列。"""
+    conditions = []
+    if audit_status is not None:
+        conditions.append(ParagraphComment.audit_status == audit_status)
+
+    total = int(
+        db.scalar(select(func.count()).select_from(ParagraphComment).where(*conditions)) or 0
+    )
+    rows = list(
+        db.scalars(
+            select(ParagraphComment)
+            .where(*conditions)
+            .order_by(ParagraphComment.id.desc())
+            .offset((page - 1) * size)
+            .limit(size)
+        ).all()
+    )
+    return rows, total

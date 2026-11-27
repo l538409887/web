@@ -10,7 +10,7 @@ from app.models.shelf import ReadingHistory, UserBookshelf
 
 
 def add_to_shelf(db: Session, user_id: int, book_id: int) -> None:
-    book = db.scalar(select(Book.id).where(Book.id == book_id, Book.audit_status == 1))
+    book = db.scalar(select(Book.id).where(Book.id == book_id, Book.is_online))
     if book is None:
         raise BizError(3001, "书籍不存在或已下架")
 

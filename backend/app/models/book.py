@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -63,6 +64,16 @@ class Book(Base):
     recommend_count: Mapped[int] = mapped_column(Integer, default=0)
     score: Mapped[Decimal] = mapped_column(Numeric(3, 1), default=Decimal("0.0"))
     is_paid: Mapped[int] = mapped_column(TINYINT, default=0)
+    @hybrid_property
+    def is_online(self) -> bool:
+        """前台可见 = 审核通过 且 已上架。"""
+        return self.audit_status == 2 and self.shelf_status == 2
+
+    @is_online.expression
+    def is_online(cls):
+        from sqlalchemy import and_
+
+        return and_(cls.audit_status == 2, cls.shelf_status == 2)
     price_coin: Mapped[int] = mapped_column(Integer, default=0)
     revenue_coin: Mapped[int] = mapped_column(Integer, default=0)
     watermelon_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -70,6 +81,7 @@ class Book(Base):
     last_chapter_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
     last_chapter_title: Mapped[str] = mapped_column(String(200), default="")
     last_update_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    shelf_status: Mapped[int] = mapped_column(TINYINT, default=0)
     is_recommend: Mapped[int] = mapped_column(TINYINT, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

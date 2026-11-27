@@ -20,6 +20,7 @@ class StatsOut(BaseModel):
 
 class AdminBookItem(BookCard):
     audit_status: int = 1
+    shelf_status: int = 0
     is_recommend: bool = False
     created_at: DateTimeStr | None = None
     intro: str = ""
@@ -27,6 +28,7 @@ class AdminBookItem(BookCard):
 
 class BookStatusIn(BaseModel):
     audit_status: int | None = None
+    shelf_status: int | None = None
     is_recommend: bool | None = None
 
 

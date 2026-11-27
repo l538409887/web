@@ -132,7 +132,7 @@ def list_my_comments(
 
 
 def create_comment(db: Session, user: SysUser, data) -> BookComment:
-    book = db.scalar(select(Book.id).where(Book.id == data.book_id, Book.audit_status == 1))
+    book = db.scalar(select(Book.id).where(Book.id == data.book_id, Book.is_online))
     if book is None:
         raise BizError(3001, "书籍不存在或已下架")
 

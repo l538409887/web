@@ -26,7 +26,7 @@ SECTION_SIZE = {
 def _top(db: Session, key: str, limit: int = 10) -> list[Book]:
     stmt = (
         select(Book)
-        .where(Book.audit_status == 1)
+        .where(Book.is_online)
         .order_by(RANK_MAP.get(key, RANK_MAP["click"]), Book.id.desc())
         .limit(limit)
     )
@@ -34,7 +34,7 @@ def _top(db: Session, key: str, limit: int = 10) -> list[Book]:
 
 
 def _section(db: Session, order, limit: int, exclude: set[int] | None = None) -> list[Book]:
-    stmt = select(Book).where(Book.audit_status == 1).order_by(order, Book.id.desc())
+    stmt = select(Book).where(Book.is_online).order_by(order, Book.id.desc())
     rows = list(db.scalars(stmt.limit(limit + (len(exclude) if exclude else 0))).all())
     if exclude:
         rows = [b for b in rows if b.id not in exclude]
@@ -45,7 +45,7 @@ def get_home(db: Session) -> dict:
     banners = list(
         db.scalars(
             select(Book)
-            .where(Book.audit_status == 1, Book.is_recommend == 1)
+            .where(Book.is_online, Book.is_recommend == 1)
             .order_by(Book.click_count.desc())
             .limit(3)
         ).all()
@@ -53,7 +53,7 @@ def get_home(db: Session) -> dict:
     latest = list(
         db.scalars(
             select(Book)
-            .where(Book.audit_status == 1)
+            .where(Book.is_online)
             .order_by(Book.last_update_at.desc())
             .limit(12)
         ).all()

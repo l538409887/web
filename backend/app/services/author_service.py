@@ -7,6 +7,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BizError
+from app.core.state import (
+    AUDIT_APPROVED,
+    AUDIT_DRAFT,
+    AUDIT_PENDING,
+    CHAPTER_PENDING,
+    SHELF_OFFLINE,
+    SHELF_ONLINE,
+    SHELF_PENDING,
+)
 from app.models.book import Book, BookCategory
 from app.models.chapter import BookChapter
 from app.models.follow import AuthorFollow
@@ -73,7 +82,8 @@ def create_book(db: Session, user: SysUser, payload) -> Book:
         intro=payload.intro.strip(),
         cover=payload.cover or "",
         status=payload.status,
-        audit_status=0,
+        audit_status=AUDIT_DRAFT,
+        shelf_status=SHELF_OFFLINE,
         word_count=0,
         chapter_count=0,
         click_count=0,
@@ -101,6 +111,34 @@ def update_book(db: Session, user: SysUser, book_id: int, payload) -> Book:
     if payload.status is not None:
         book.status = payload.status
 
+    db.commit()
+    db.refresh(book)
+    return book
+
+
+def submit_book(db: Session, user: SysUser, book_id: int) -> Book:
+    """提交审核：草稿 / 未通过 -> 待审核。"""
+    book = _own_book(db, user, book_id)
+    if book.audit_status == AUDIT_PENDING:
+        raise BizError(1001, "作品已在审核中，请等待审核结果")
+    if book.audit_status == AUDIT_APPROVED:
+        raise BizError(1001, "作品已通过审核，无需重复提交")
+    book.audit_status = AUDIT_PENDING
+    db.commit()
+    db.refresh(book)
+    return book
+
+
+def apply_shelf(db: Session, user: SysUser, book_id: int) -> Book:
+    """申请上架：必须先通过内容审核。"""
+    book = _own_book(db, user, book_id)
+    if book.audit_status != AUDIT_APPROVED:
+        raise BizError(1001, "请先通过内容审核，再申请上架")
+    if book.shelf_status == SHELF_ONLINE:
+        raise BizError(1001, "作品已上架")
+    if book.shelf_status == SHELF_PENDING:
+        raise BizError(1001, "上架申请审核中，请等待结果")
+    book.shelf_status = SHELF_PENDING
     db.commit()
     db.refresh(book)
     return book
@@ -158,6 +196,7 @@ def create_chapter(db: Session, user: SysUser, book_id: int, title: str, content
         content=content.strip(),
         word_count=count_words(content),
         status=1,
+        audit_status=CHAPTER_PENDING,
     )
     db.add(chapter)
     db.flush()
@@ -238,6 +277,7 @@ def import_chapters(db: Session, user: SysUser, book_id: int, raw_text: str) -> 
                 content=body.strip(),
                 word_count=words,
                 status=1,
+                audit_status=CHAPTER_PENDING,
             )
         )
 
@@ -267,7 +307,7 @@ def get_author(db: Session, author_id: int, viewer_id: int | None = None) -> dic
         db.scalar(
             select(func.count())
             .select_from(Book)
-            .where(Book.author_id == author_id, Book.audit_status == 1)
+            .where(Book.author_id == author_id, Book.is_online)
         )
         or 0
     )
@@ -385,7 +425,7 @@ def my_follows(db: Session, user_id: int, page: int = 1, size: int = 12):
             db.scalar(
                 select(func.count())
                 .select_from(Book)
-                .where(Book.author_id == author.id, Book.audit_status == 1)
+                .where(Book.author_id == author.id, Book.is_online)
             )
             or 0
         )

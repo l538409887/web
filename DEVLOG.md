@@ -51,6 +51,94 @@
 
 # 日志正文
 
+## 2026-11-27 · P19 · 审核与上架状态机（后端）
+
+**背景**
+
+原来 `book.audit_status` 只有 0/1/2（待审/通过/驳回），而且**通过就等于上架**，
+作者看不到「我提交了没」「审核到哪一步」「能不能上架」。
+章节和间贴更是发布即生效，没有审核环节。
+
+**一、状态模型（迁移 008）**
+
+| 对象 | 字段 | 取值 |
+|---|---|---|
+| 书籍 | `audit_status` | 0 未提交 / 1 待审核 / 2 通过 / 3 未通过 |
+| 书籍 | `shelf_status`（新增） | 0 未上架 / 1 上架审核中 / 2 已上架 / 3 上架未通过 |
+| 章节 | `audit_status`（新增） | 0 草稿 / 1 待审核 / 2 通过 / 3 未通过 |
+| 间贴 | `audit_status`（新增） | 0 待审核 / 1 通过 / 2 驳回 |
+
+**关键变化：审核通过 ≠ 上架。** 前台可见需要同时满足
+`audit_status = 2` **且** `shelf_status = 2`，两段流水线。
+
+数据迁移：旧的 0/1/2 映射到新的 1/2/3，历史章节与间贴一律补为「已通过」，
+已通过的书自动置为「已上架」，保证前台不空。
+
+**二、把可见性收敛到一处**
+
+这次最容易出事的地方是：全站有 **20 处** `Book.audit_status == 1` 的判断，
+语义一改就全错。做法是加 `hybrid_property`：
+
+```python
+class Book:
+    @hybrid_property
+    def is_online(self): return self.audit_status == 2 and self.shelf_status == 2
+
+    @is_online.expression
+    def is_online(cls): return and_(cls.audit_status == 2, cls.shelf_status == 2)
+```
+
+于是替换只是 `Book.audit_status == 1` → `Book.is_online`，**括号结构不变**，
+不会出现 where 条件拼错。章节 `is_visible`、间贴 `is_visible` 同理。
+
+常量集中在新文件 `app/core/state.py`，不再散落裸数字。
+
+**三、新增接口**
+
+| 角色 | 接口 | 说明 |
+|---|---|---|
+| 作者 | `POST /author/books/{id}/submit` | 草稿/未通过 → 待审核 |
+| 作者 | `POST /author/books/{id}/apply-shelf` | 需先审核通过，才能申请上架 |
+| 管理 | `PUT /admin/books/{id}/status` | 扩展支持 `audit_status` 四态 + `shelf_status` |
+| 管理 | `GET /admin/chapters` | 章节审核队列（按审核态/书籍筛选）|
+| 管理 | `PUT /admin/chapters/{id}/audit` | 章节审核 |
+| 管理 | `PUT /admin/paragraph-comments/{id}/audit` | 间贴审核（驳回即隐藏）|
+| 管理 | `GET /admin/comments?reported=true` | 只看被举报评论 |
+| 管理 | `GET /admin/paragraph-comments?audit_status=` | 按审核态筛选间贴 |
+
+**四、先发后审 vs 先审后发**
+
+- **章节**：先审后发。新章节 `audit_status=1`，前台目录看不到，直接访问 chapter_id 返回 3002
+- **间贴**：先发后审。待审核仍展示，只有被「驳回」才隐藏——
+  否则每句话都要等审核，评论区会死掉
+
+这个差异是刻意的，答辩时可以讲。
+
+**验证（12 项）**
+
+| 场景 | 结果 |
+|---|---|
+| 新建作品 | audit_status=0（未提交）|
+| 提交审核 | 1（待审核）|
+| 未通过审核申请上架 | 拒绝「请先通过内容审核」|
+| 管理员审核通过 | audit=2, shelf=0 |
+| 申请上架 | shelf=1 |
+| 通过但未上架 | **前台搜不到**（0 条）|
+| 批准上架 | 前台可见（1 条）|
+| 新增章节 | audit=1，前台目录 0 章 |
+| 未审章节直接访问 | 3002 章节不存在 |
+| 章节审核通过 | 目录 1 章，可正常阅读 |
+| 间贴待审 | 前台仍展示 |
+| 间贴被驳回 | 前台 0 条 |
+| 用户按角色筛选 | reader 1 / author 4 / admin 1 |
+
+**下一步**
+
+前端改造（这一轮只做了后端）：
+作者端状态标签与提交按钮、后台章节审核页、用户管理三栏、评论管理「全部/被举报」分栏、
+间贴审核页补审核动作。
+
+---
 ## 2026-11-27 · P18 · 举报重构：点赞/点踩/举报解耦
 
 **原来的问题**

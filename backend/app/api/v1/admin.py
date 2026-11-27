@@ -71,7 +71,7 @@ def update_book_status(
     book_id: int, payload: BookStatusIn, db: Session = Depends(get_db)
 ):
     admin_service.update_book_status(
-        db, book_id, payload.audit_status, payload.is_recommend
+        db, book_id, payload.audit_status, payload.is_recommend, payload.shelf_status
     )
     logger.bind(business=True).info(
         "BOOK_AUDIT book={} audit={} recommend={}",
@@ -146,6 +146,7 @@ def update_user(
 def list_comments(
     book_id: int | None = None,
     status: int | None = None,
+    reported: bool = False,
     page: int = 1,
     size: int = 20,
     db: Session = Depends(get_db),
@@ -153,7 +154,7 @@ def list_comments(
     page = max(1, page)
     size = min(max(1, size), 50)
     rows, total = admin_service.list_comments(
-        db, book_id=book_id, status=status, page=page, size=size
+        db, book_id=book_id, status=status, page=page, size=size, reported=reported
     )
     items = [AdminCommentItem(**row) for row in rows]
     pages = (total + size - 1) // size
@@ -235,6 +236,7 @@ def cancel_order(order_id: int, db: Session = Depends(get_db)):
 def list_paragraph_comments(
     status: int | None = None,
     only_reported: bool = False,
+    audit_status: int | None = None,
     page: int = 1,
     size: int = 20,
     db: Session = Depends(get_db),
@@ -244,7 +246,12 @@ def list_paragraph_comments(
     page = max(1, page)
     size = min(max(1, size), 50)
     rows, total = interaction_service.admin_list_paragraph_comments(
-        db, status=status, only_reported=only_reported, page=page, size=size
+        db,
+        status=status,
+        only_reported=only_reported,
+        audit_status=audit_status,
+        page=page,
+        size=size,
     )
     pages = (total + size - 1) // size
     return ok(
@@ -402,3 +409,66 @@ def admin_handle_report(
         payload.action,
     )
     return ok(result)
+
+
+# ---------------- 章节审核 ----------------
+class ChapterAuditIn(BaseModel):
+    audit_status: int
+
+
+@router.get("/chapters", summary="章节审核队列")
+def admin_list_chapters(
+    audit_status: int | None = 1,
+    book_id: int | None = None,
+    page: int = 1,
+    size: int = 20,
+    db: Session = Depends(get_db),
+):
+    page = max(1, page)
+    size = min(max(1, size), 50)
+    items, total = admin_service.list_chapters_for_audit(
+        db, audit_status=audit_status, book_id=book_id, page=page, size=size
+    )
+    pages = (total + size - 1) // size
+    return ok({"list": items, "total": total, "page": page, "size": size, "pages": pages})
+
+
+@router.put("/chapters/{chapter_id}/audit", summary="审核章节")
+def admin_audit_chapter(
+    chapter_id: int,
+    payload: ChapterAuditIn,
+    admin: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    admin_service.update_chapter_audit(db, chapter_id, payload.audit_status)
+    logger.bind(business=True).info(
+        "CHAPTER_AUDIT admin={} chapter={} status={}",
+        admin.id,
+        chapter_id,
+        payload.audit_status,
+    )
+    return ok({"chapter_id": chapter_id, "audit_status": payload.audit_status})
+
+
+# ---------------- 间贴审核 ----------------
+class ParagraphAuditIn(BaseModel):
+    audit_status: int
+
+
+@router.put("/paragraph-comments/{comment_id}/audit", summary="审核间贴")
+def admin_audit_paragraph(
+    comment_id: int,
+    payload: ParagraphAuditIn,
+    admin: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.services import interaction_service
+
+    interaction_service.set_paragraph_audit(db, comment_id, payload.audit_status)
+    logger.bind(business=True).info(
+        "PARAGRAPH_AUDIT admin={} comment={} status={}",
+        admin.id,
+        comment_id,
+        payload.audit_status,
+    )
+    return ok({"comment_id": comment_id, "audit_status": payload.audit_status})

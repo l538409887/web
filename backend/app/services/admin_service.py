@@ -79,15 +79,20 @@ def update_book_status(
     book_id: int,
     audit_status: int | None,
     is_recommend: bool | None,
+    shelf_status: int | None = None,
 ) -> None:
     book = db.get(Book, book_id)
     if book is None:
         raise BizError(3001, "书籍不存在")
 
     if audit_status is not None:
-        if audit_status not in (0, 1, 2):
-            raise BizError(1001, "audit_status 只能是 0/1/2")
+        if audit_status not in (0, 1, 2, 3):
+            raise BizError(1001, "audit_status 只能是 0未提交/1待审核/2通过/3未通过")
         book.audit_status = audit_status
+    if shelf_status is not None:
+        if shelf_status not in (0, 1, 2, 3):
+            raise BizError(1001, "shelf_status 只能是 0未上架/1申请中/2已上架/3被拒")
+        book.shelf_status = shelf_status
     if is_recommend is not None:
         book.is_recommend = 1 if is_recommend else 0
     db.commit()
@@ -231,12 +236,24 @@ def list_comments(
     status: int | None,
     page: int,
     size: int,
+    reported: bool = False,
 ) -> tuple[list[dict], int]:
+    from app.models.report import ContentReport
+
     conditions = []
     if book_id:
         conditions.append(BookComment.book_id == book_id)
     if status is not None:
         conditions.append(BookComment.status == status)
+    if reported:
+        conditions.append(
+            BookComment.id.in_(
+                select(ContentReport.target_id).where(
+                    ContentReport.target_type == "book_comment",
+                    ContentReport.status == 0,
+                )
+            )
+        )
     return comment_service.list_with_meta(db, conditions, page, size)
 
 
@@ -295,4 +312,73 @@ def delete_category(db: Session, category_id: int) -> None:
     if used > 0:
         raise BizError(1001, f"该分类下还有 {used} 本书，请先迁移")
     db.delete(category)
+    db.commit()
+
+# ---------------- 章节审核 ----------------
+def list_chapters_for_audit(
+    db: Session,
+    *,
+    audit_status: int | None = None,
+    book_id: int | None = None,
+    page: int = 1,
+    size: int = 20,
+) -> tuple[list[dict], int]:
+    from app.models.book import Book
+    from app.models.chapter import BookChapter
+
+    conditions = []
+    if audit_status is not None:
+        conditions.append(BookChapter.audit_status == audit_status)
+    if book_id:
+        conditions.append(BookChapter.book_id == book_id)
+
+    total = int(
+        db.scalar(select(func.count()).select_from(BookChapter).where(*conditions)) or 0
+    )
+    rows = list(
+        db.scalars(
+            select(BookChapter)
+            .where(*conditions)
+            .order_by(BookChapter.id.desc())
+            .offset((page - 1) * size)
+            .limit(size)
+        ).all()
+    )
+
+    book_ids = {row.book_id for row in rows}
+    books = (
+        {b.id: b.title for b in db.scalars(select(Book).where(Book.id.in_(book_ids))).all()}
+        if book_ids
+        else {}
+    )
+
+    items = [
+        {
+            "id": row.id,
+            "book_id": row.book_id,
+            "book_title": books.get(row.book_id, ""),
+            "chapter_no": row.chapter_no,
+            "title": row.title,
+            "word_count": row.word_count,
+            "status": row.status,
+            "audit_status": row.audit_status,
+            "created_at": row.created_at,
+            "preview": (row.content or "").replace("\n", " ")[:80],
+        }
+        for row in rows
+    ]
+    return items, total
+
+
+def update_chapter_audit(db: Session, chapter_id: int, audit_status: int) -> None:
+    from app.models.chapter import BookChapter
+
+    if audit_status not in (0, 1, 2, 3):
+        raise BizError(1001, "audit_status 只能是 0草稿/1待审核/2通过/3未通过")
+
+    chapter = db.get(BookChapter, chapter_id)
+    if chapter is None:
+        raise BizError(3002, "章节不存在")
+
+    chapter.audit_status = audit_status
     db.commit()
