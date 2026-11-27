@@ -114,6 +114,12 @@ const routes = [
         meta: { title: '评论管理' }
       },
       {
+        path: 'reports',
+        name: 'AdminReports',
+        component: () => import('@/views/admin/Reports.vue'),
+        meta: { title: '举报处理' }
+      },
+      {
         path: 'notices',
         name: 'AdminNotices',
         component: () => import('@/views/admin/Notices.vue'),

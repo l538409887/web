@@ -358,3 +358,47 @@ def admin_delete_notice(notice_id: int, db: Session = Depends(get_db)):
 
     notice_service.delete(db, notice_id)
     return ok(None)
+
+# ---------------- 举报处理 ----------------
+class ReportActionIn(BaseModel):
+    action: str
+
+
+@router.get("/reports", summary="举报队列")
+def admin_list_reports(
+    status: int | None = 0,
+    target_type: str | None = None,
+    page: int = 1,
+    size: int = 20,
+    db: Session = Depends(get_db),
+):
+    from app.services import report_service
+
+    page = max(1, page)
+    size = min(max(1, size), 50)
+    items, total = report_service.list_reports(
+        db, status=status, target_type=target_type, page=page, size=size
+    )
+    pages = (total + size - 1) // size
+    return ok(
+        {"list": items, "total": total, "page": page, "size": size, "pages": pages}
+    )
+
+
+@router.put("/reports/{report_id}", summary="处理举报")
+def admin_handle_report(
+    report_id: int,
+    payload: ReportActionIn,
+    admin: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.services import report_service
+
+    result = report_service.handle_report(db, admin.id, report_id, payload.action)
+    logger.bind(business=True).info(
+        "REPORT_HANDLE admin={} report={} action={}",
+        admin.id,
+        report_id,
+        payload.action,
+    )
+    return ok(result)

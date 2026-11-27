@@ -409,8 +409,8 @@ def my_paragraph_comments(db: Session, user_id: int, page: int = 1, size: int = 
 def react_paragraph_comment(
     db: Session, user: SysUser, comment_id: int, reaction: int
 ) -> dict:
-    if reaction not in (1, 2, 3):
-        raise BizError(1001, "reaction 只能是 1赞 / 2踩 / 3举报")
+    if reaction not in (1, 2):
+        raise BizError(1001, "reaction 只能是 1 赞 / 2 踩（举报请走 /reports）")
 
     comment = db.get(ParagraphComment, comment_id)
     if comment is None or comment.status != 1:
@@ -433,18 +433,18 @@ def react_paragraph_comment(
 
     if existing is None:
         db.add(ParagraphReaction(comment_id=comment_id, user_id=user.id, reaction=reaction))
-        bump({1: "like_count", 2: "dislike_count", 3: "report_count"}[reaction], 1)
+        bump({1: "like_count", 2: "dislike_count"}[reaction], 1)
         db.commit()
         return {"reaction": reaction, "state": "on"}
 
     if existing.reaction == reaction:
         db.delete(existing)
-        bump({1: "like_count", 2: "dislike_count", 3: "report_count"}[reaction], -1)
+        bump({1: "like_count", 2: "dislike_count"}[reaction], -1)
         db.commit()
         return {"reaction": 0, "state": "off"}
 
-    bump({1: "like_count", 2: "dislike_count", 3: "report_count"}[existing.reaction], -1)
-    bump({1: "like_count", 2: "dislike_count", 3: "report_count"}[reaction], 1)
+    bump({1: "like_count", 2: "dislike_count"}[existing.reaction], -1)
+    bump({1: "like_count", 2: "dislike_count"}[reaction], 1)
     existing.reaction = reaction
     db.commit()
     return {"reaction": reaction, "state": "on"}

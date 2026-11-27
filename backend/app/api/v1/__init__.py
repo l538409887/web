@@ -14,6 +14,7 @@ from app.api.v1 import (
     interaction,
     notices,
     rank,
+    reports,
     shelf,
     upload,
     user,
@@ -32,6 +33,7 @@ api_router.include_router(interaction.router)
 api_router.include_router(rank.router)
 api_router.include_router(notices.router)
 api_router.include_router(authors.router)
+api_router.include_router(reports.router)
 api_router.include_router(upload.router)
 api_router.include_router(user.router)
 api_router.include_router(wallet.router)

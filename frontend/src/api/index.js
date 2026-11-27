@@ -3,6 +3,9 @@ import request from './request'
 export const getHome = () => request.get('/home')
 export const getNotices = (limit = 6) => request.get('/notices', { params: { limit } })
 
+export const getReportReasons = () => request.get('/reports/reasons')
+export const createReport = (payload) => request.post('/reports', payload)
+
 export const getAuthor = (id) => request.get(`/authors/${id}`)
 export const getAuthorBooks = (id, params) => request.get(`/authors/${id}/books`, { params })
 export const followAuthor = (id) => request.post(`/authors/${id}/follow`)

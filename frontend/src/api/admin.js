@@ -18,6 +18,10 @@ export const getAdminComments = (params) => request.get('/admin/comments', { par
 export const updateCommentStatus = (id, status) =>
   request.put(`/admin/comments/${id}/status`, { status })
 
+export const getAdminReports = (params) => request.get('/admin/reports', { params })
+export const handleReport = (id, action) =>
+  request.put(`/admin/reports/${id}`, { action })
+
 export const getParagraphComments = (params) =>
   request.get('/admin/paragraph-comments', { params })
 export const updateParagraphStatus = (id, status) =>

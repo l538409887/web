@@ -390,4 +390,24 @@ CREATE TABLE `author_follow` (
   CONSTRAINT `fk_af_user`   FOREIGN KEY (`user_id`)   REFERENCES `sys_user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_af_author` FOREIGN KEY (`author_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='作者关注';
+-- -------------------------------------------------------------
+-- 20. 内容举报（书评 / 间贴通用）
+-- -------------------------------------------------------------
+CREATE TABLE `content_report` (
+  `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `target_type` VARCHAR(20)     NOT NULL COMMENT 'book_comment / paragraph_comment',
+  `target_id`   BIGINT UNSIGNED NOT NULL COMMENT '举报对象ID',
+  `reporter_id` BIGINT UNSIGNED NOT NULL COMMENT '举报人',
+  `reason`      VARCHAR(200)    NOT NULL DEFAULT '' COMMENT '举报理由',
+  `detail`      VARCHAR(300)    NOT NULL DEFAULT '' COMMENT '补充说明',
+  `status`      TINYINT         NOT NULL DEFAULT 0 COMMENT '0待处理 1已忽略 2已处理（内容已隐藏）',
+  `handled_by`  BIGINT UNSIGNED          DEFAULT NULL,
+  `handled_at`  DATETIME                 DEFAULT NULL,
+  `created_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_target_reporter` (`target_type`, `target_id`, `reporter_id`),
+  KEY `idx_status` (`status`, `created_at`),
+  KEY `idx_target` (`target_type`, `target_id`),
+  CONSTRAINT `fk_report_user` FOREIGN KEY (`reporter_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='内容举报';
 -- =============================================================

@@ -14,6 +14,7 @@ const menus = [
   { path: '/admin/categories', label: '分类管理' },
   { path: '/admin/users', label: '用户管理' },
   { path: '/admin/comments', label: '评论管理' },
+  { path: '/admin/reports', label: '举报处理' },
   { path: '/admin/paragraph-comments', label: '间贴审核' },
   { path: '/admin/notices', label: '公告管理' },
   { path: '/admin/orders', label: '充值订单' }

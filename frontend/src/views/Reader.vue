@@ -15,6 +15,7 @@ import { useUserStore } from '@/stores/user'
 import { toast } from '@/utils/toast'
 import EmptyState from '@/components/EmptyState.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
+import ReportDialog from '@/components/ReportDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,6 +37,16 @@ const sending = ref(false)
 const buying = ref(false)
 const replyTarget = ref(null)
 const highlightId = ref(0)
+const reportOpen = ref(false)
+const reportId = ref(0)
+const reportPreview = ref('')
+
+function openReport(comment) {
+  if (!requireLogin()) return
+  reportId.value = comment.id
+  reportPreview.value = comment.content.slice(0, 60)
+  reportOpen.value = true
+}
 
 const paragraphs = computed(() => {
   if (!chapter.value?.content) return []
@@ -221,7 +232,6 @@ async function react(comment, type) {
   try {
     await reactParagraph(comment.id, type)
     await loadParaComments(chapter.value.id)
-    if (type === 3) toast('已举报，管理员会尽快处理')
   } catch {
     /* 拦截器已提示 */
   }
@@ -422,7 +432,7 @@ onBeforeUnmount(() => {
                 👎 {{ item.dislike_count }}
               </button>
               <button class="pcm__op" type="button" @click="startReply(item)">回复</button>
-              <button class="pcm__op pcm__op--report" type="button" @click="react(item, 3)">
+              <button class="pcm__op pcm__op--report" type="button" @click="openReport(item)">
                 举报
               </button>
             </div>
@@ -440,7 +450,7 @@ onBeforeUnmount(() => {
                   <button class="pcm__op" type="button" @click="react(reply, 1)">
                     👍 {{ reply.like_count }}
                   </button>
-                  <button class="pcm__op pcm__op--report" type="button" @click="react(reply, 3)">
+                  <button class="pcm__op pcm__op--report" type="button" @click="openReport(reply)">
                     举报
                   </button>
                 </div>
@@ -471,6 +481,14 @@ onBeforeUnmount(() => {
       </div>
     </aside>
   </Teleport>
+
+  <ReportDialog
+    v-model="reportOpen"
+    target-type="paragraph_comment"
+    :target-id="reportId"
+    :preview="reportPreview"
+    @submitted="loadParaComments(chapter.id)"
+  />
 </template>
 
 <style scoped>

@@ -6,6 +6,7 @@ import { useUserStore } from '@/stores/user'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/composables/useConfirm'
 import UserAvatar from '@/components/UserAvatar.vue'
+import ReportDialog from '@/components/ReportDialog.vue'
 
 const props = defineProps({
   bookId: { type: [Number, String], required: true },
@@ -23,6 +24,19 @@ const submitting = ref(false)
 const content = ref('')
 const replyTarget = ref(null)
 const replyText = ref('')
+const reportOpen = ref(false)
+const reportId = ref(0)
+const reportPreview = ref('')
+
+function openReport(item) {
+  if (!user.isLogin) {
+    toast('请先登录')
+    return
+  }
+  reportId.value = item.id
+  reportPreview.value = item.content.slice(0, 60)
+  reportOpen.value = true
+}
 const replySubmitting = ref(false)
 
 const title = computed(() => (props.chapterId ? '本章评论' : '书评区'))
@@ -174,6 +188,14 @@ watch(() => [props.bookId, props.chapterId], () => load(), { immediate: true })
 
           <div class="c-item__ops">
             <button class="c-link" type="button" @click="openReply(item)">回复</button>
+            <button
+              v-if="user.isLogin && user.profile?.id !== item.user.id"
+              class="c-link c-link--report"
+              type="button"
+              @click="openReport(item)"
+            >
+              举报
+            </button>
             <button v-if="canDelete(item)" class="c-link c-link--danger" type="button" @click="remove(item)">
               删除
             </button>
@@ -208,6 +230,14 @@ watch(() => [props.bookId, props.chapterId], () => load(), { immediate: true })
         </div>
       </li>
     </ul>
+
+    <ReportDialog
+      v-model="reportOpen"
+      target-type="book_comment"
+      :target-id="reportId"
+      :preview="reportPreview"
+      @submitted="load"
+    />
   </section>
 </template>
 
@@ -328,6 +358,10 @@ watch(() => [props.bookId, props.chapterId], () => load(), { immediate: true })
 
 .c-link:hover {
   color: var(--c-primary);
+}
+
+.c-link--report:hover {
+  color: var(--c-accent);
 }
 
 .c-link--danger:hover {

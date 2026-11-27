@@ -14,6 +14,7 @@ from app.models.interaction import (
 )
 from app.models.follow import AuthorFollow
 from app.models.notice import SiteNotice
+from app.models.report import ContentReport
 from app.models.wallet import RechargeOrder, SignIn
 
 __all__ = [
