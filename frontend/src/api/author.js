@@ -5,6 +5,8 @@ export const applyAuthor = () => request.post('/author/apply')
 export const getMyBooks = (params) => request.get('/author/books', { params })
 export const createMyBook = (payload) => request.post('/author/books', payload)
 export const updateMyBook = (id, payload) => request.put(`/author/books/${id}`, payload)
+export const submitMyBook = (id) => request.post(`/author/books/${id}/submit`)
+export const applyMyBookShelf = (id) => request.post(`/author/books/${id}/apply-shelf`)
 
 export const getMyChapters = (bookId, params) =>
   request.get(`/author/books/${bookId}/chapters`, { params })

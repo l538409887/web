@@ -1,7 +1,14 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { applyAuthor, createMyBook, getMyBooks, updateMyBook } from '@/api/author'
+import {
+  applyAuthor,
+  applyMyBookShelf,
+  createMyBook,
+  getMyBooks,
+  submitMyBook,
+  updateMyBook
+} from '@/api/author'
 import { getCategories } from '@/api/admin'
 import ChapterImporter from '@/components/ChapterImporter.vue'
 import { useUserStore } from '@/stores/user'
@@ -23,9 +30,32 @@ const form = reactive({ title: '', category_id: null, intro: '', status: 0 })
 const importVisible = ref(false)
 const importTarget = ref(null)
 const applying = ref(false)
+const busyId = ref(0)
 
-const auditText = (v) => (v === 1 ? '已上架' : v === 2 ? '已下架' : '待审核')
-const auditType = (v) => (v === 1 ? 'success' : v === 2 ? 'info' : 'warning')
+// 审核四态：0 未提交 / 1 待审核 / 2 通过 / 3 未通过
+const AUDIT = {
+  0: { text: '未提交', type: 'info' },
+  1: { text: '待审核', type: 'warning' },
+  2: { text: '审核通过', type: 'success' },
+  3: { text: '审核未通过', type: 'danger' }
+}
+
+// 上架四态：0 未上架 / 1 上架审核中 / 2 已上架 / 3 上架未通过
+const SHELF = {
+  0: { text: '未上架', type: 'info' },
+  1: { text: '上架审核中', type: 'warning' },
+  2: { text: '已上架', type: 'success' },
+  3: { text: '上架未通过', type: 'danger' }
+}
+
+const auditOf = (v) => AUDIT[v] || AUDIT[0]
+const shelfOf = (v) => SHELF[v] || SHELF[0]
+
+/** 能否提交审核：还没提交，或被驳回 */
+const canSubmit = (row) => row.audit_status === 0 || row.audit_status === 3
+/** 能否申请上架：内容审核通过，且还没上架/没在申请中 */
+const canApplyShelf = (row) =>
+  row.audit_status === 2 && (row.shelf_status === 0 || row.shelf_status === 3)
 
 async function load() {
   if (!isAuthor.value) return
@@ -92,27 +122,51 @@ async function submit() {
     if (editing.value) {
       await updateMyBook(editing.value.id, payload)
       ElMessage.success('已保存')
+      dialogVisible.value = false
+      await load()
     } else {
       const res = await createMyBook(payload)
-      ElMessage.success('作品已创建，等待管理员审核后上架')
+      ElMessage.success('作品已创建，状态为「未提交」，请提交审核')
       dialogVisible.value = false
       await load()
       openImport({ id: res.id, title: payload.title })
       return
     }
-    dialogVisible.value = false
-    await load()
   } catch {
     /* 拦截器已提示 */
   }
 }
 
-function openImport(row) {
-  importTarget.value = row
-  importText.value = ''
-  importVisible.value = true
+async function doSubmit(row) {
+  busyId.value = row.id
+  try {
+    await submitMyBook(row.id)
+    row.audit_status = 1
+    ElMessage.success('已提交审核，请等待管理员处理')
+  } catch {
+    /* 拦截器已提示 */
+  } finally {
+    busyId.value = 0
+  }
 }
 
+async function doApplyShelf(row) {
+  busyId.value = row.id
+  try {
+    await applyMyBookShelf(row.id)
+    row.shelf_status = 1
+    ElMessage.success('上架申请已提交')
+  } catch {
+    /* 拦截器已提示 */
+  } finally {
+    busyId.value = 0
+  }
+}
+
+function openImport(row) {
+  importTarget.value = row
+  importVisible.value = true
+}
 
 onMounted(load)
 </script>
@@ -135,6 +189,13 @@ onMounted(load)
       <el-button type="primary" @click="openCreate">新建作品</el-button>
     </div>
 
+    <el-alert type="info" :closable="false" class="flow">
+      <template #title>
+        发布流程：新建作品（未提交）→ <b>提交审核</b> → 管理员审核 → 审核通过后
+        <b>申请上架</b> → 管理员上架 → 前台可见
+      </template>
+    </el-alert>
+
     <el-table v-loading="loading" :data="list" border stripe>
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="title" label="书名" min-width="150" show-overflow-tooltip />
@@ -144,20 +205,45 @@ onMounted(load)
       <el-table-column label="章节/字数" width="140">
         <template #default="{ row }">{{ row.chapter_count }} 章 / {{ row.word_count }} 字</template>
       </el-table-column>
-      <el-table-column label="审核" width="100">
+      <el-table-column label="审核状态" width="110">
         <template #default="{ row }">
-          <el-tag :type="auditType(row.audit_status)" size="small">
-            {{ auditText(row.audit_status) }}
+          <el-tag :type="auditOf(row.audit_status).type" size="small">
+            {{ auditOf(row.audit_status).text }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="250" fixed="right">
+      <el-table-column label="上架状态" width="110">
+        <template #default="{ row }">
+          <el-tag :type="shelfOf(row.shelf_status).type" size="small" effect="plain">
+            {{ shelfOf(row.shelf_status).text }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="330" fixed="right">
         <template #default="{ row }">
           <router-link :to="`/author/books/${row.id}/chapters`">
-            <el-button link type="primary">章节管理</el-button>
+            <el-button link type="primary">章节</el-button>
           </router-link>
           <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button link type="success" @click="openImport(row)">导入章节</el-button>
+          <el-button link type="success" @click="openImport(row)">导入</el-button>
+          <el-button
+            v-if="canSubmit(row)"
+            link
+            type="warning"
+            :disabled="busyId === row.id"
+            @click="doSubmit(row)"
+          >
+            提交审核
+          </el-button>
+          <el-button
+            v-if="canApplyShelf(row)"
+            link
+            type="primary"
+            :disabled="busyId === row.id"
+            @click="doApplyShelf(row)"
+          >
+            申请上架
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -252,14 +338,12 @@ onMounted(load)
   color: #2b2b2b;
 }
 
+.flow {
+  margin-bottom: 14px;
+}
+
 .pager {
   margin-top: 16px;
   justify-content: flex-end;
-}
-
-.tip {
-  margin: 0 0 12px;
-  font-size: 13px;
-  color: #7a7a7a;
 }
 </style>

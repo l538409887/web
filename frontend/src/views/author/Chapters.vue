@@ -1,4 +1,12 @@
 <script setup>
+const CHAPTER_AUDIT = {
+  0: { text: '草稿', type: 'info' },
+  1: { text: '待审核', type: 'warning' },
+  2: { text: '已通过', type: 'success' },
+  3: { text: '未通过', type: 'danger' }
+}
+const chapterAuditText = (v) => (CHAPTER_AUDIT[v] || CHAPTER_AUDIT[2]).text
+const chapterAuditType = (v) => (CHAPTER_AUDIT[v] || CHAPTER_AUDIT[2]).type
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -137,6 +145,13 @@ onMounted(() => {
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
             {{ row.status === 1 ? '正常' : '已隐藏' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="审核" width="100">
+        <template #default="{ row }">
+          <el-tag :type="chapterAuditType(row.audit_status)" size="small">
+            {{ chapterAuditText(row.audit_status) }}
           </el-tag>
         </template>
       </el-table-column>

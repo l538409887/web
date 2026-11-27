@@ -1,13 +1,17 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getParagraphComments, updateParagraphStatus } from '@/api/admin'
+import {
+  auditParagraphComment,
+  getParagraphComments,
+  updateParagraphStatus
+} from '@/api/admin'
 import { confirmDialog } from '@/composables/useConfirm'
 
 const loading = ref(false)
 const list = ref([])
 const total = ref(0)
-const query = reactive({ only_reported: true, status: null, page: 1, size: 10 })
+const query = reactive({ only_reported: false, status: null, audit_status: 0, page: 1, size: 10 })
 
 const statusText = (v) => (v === 1 ? '显示中' : '已隐藏')
 const statusType = (v) => (v === 1 ? 'success' : 'info')
@@ -27,6 +31,7 @@ async function load() {
       size: query.size
     }
     if (query.status !== null) params.status = query.status
+    if (query.audit_status !== null) params.audit_status = query.audit_status
     const data = await getParagraphComments(params)
     list.value = data.list
     total.value = data.total
@@ -38,6 +43,31 @@ async function load() {
 function search() {
   query.page = 1
   load()
+}
+
+const AUDIT = {
+  0: { text: '待审核', type: 'warning' },
+  1: { text: '已通过', type: 'success' },
+  2: { text: '已驳回', type: 'danger' }
+}
+const auditOf = (v) => AUDIT[v] || AUDIT[0]
+
+async function review(row, value) {
+  const isReject = value === 2
+  const ok = await confirmDialog({
+    title: isReject ? '驳回这条间贴？' : '通过审核？',
+    message: isReject ? '驳回后前台不再展示，书籍间贴计数减一。' : '通过后正常展示。',
+    confirmText: isReject ? '驳回' : '通过'
+  })
+  if (!ok) return
+  try {
+    await auditParagraphComment(row.id, value)
+    row.audit_status = value
+    if (isReject) row.status = 0
+    ElMessage.success(isReject ? '已驳回' : '已通过')
+  } catch {
+    /* 拦截器已提示 */
+  }
 }
 
 async function toggle(row) {
@@ -70,6 +100,11 @@ onMounted(load)
         active-text="只看被举报"
         @change="search"
       />
+      <el-select v-model="query.audit_status" placeholder="全部审核态" clearable style="width: 140px">
+        <el-option label="待审核" :value="0" />
+        <el-option label="已通过" :value="1" />
+        <el-option label="已驳回" :value="2" />
+      </el-select>
       <el-select v-model="query.status" placeholder="全部状态" clearable style="width: 140px">
         <el-option label="显示中" :value="1" />
         <el-option label="已隐藏" :value="0" />
@@ -99,16 +134,39 @@ onMounted(load)
           <span class="stat stat--report">举报 {{ row.report_count }}</span>
         </template>
       </el-table-column>
+      <el-table-column label="审核" width="100">
+        <template #default="{ row }">
+          <el-tag :type="auditOf(row.audit_status).type" size="small">
+            {{ auditOf(row.audit_status).text }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)" size="small">{{ statusText(row.status) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="created_at" label="时间" width="165" />
-      <el-table-column label="操作" width="100" fixed="right">
+      <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="row.status === 1" link type="danger" @click="toggle(row)">隐藏</el-button>
-          <el-button v-else link type="success" @click="toggle(row)">恢复</el-button>
+          <el-button
+            v-if="row.audit_status !== 1"
+            link
+            type="success"
+            @click="review(row, 1)"
+          >
+            通过
+          </el-button>
+          <el-button
+            v-if="row.audit_status !== 2"
+            link
+            type="danger"
+            @click="review(row, 2)"
+          >
+            驳回
+          </el-button>
+          <el-button v-if="row.status === 1" link @click="toggle(row)">隐藏</el-button>
+          <el-button v-else link @click="toggle(row)">恢复</el-button>
         </template>
       </el-table-column>
     </el-table>

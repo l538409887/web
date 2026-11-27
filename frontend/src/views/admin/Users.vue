@@ -75,9 +75,12 @@ onMounted(load)
         style="width: 220px"
         @keyup.enter="search"
       />
-      <el-select v-model="query.role" placeholder="全部角色" clearable style="width: 140px">
-        <el-option v-for="role in roles" :key="role.value" :label="role.label" :value="role.value" />
-      </el-select>
+      <el-radio-group v-model="query.role" @change="search">
+        <el-radio-button :value="null">全部</el-radio-button>
+        <el-radio-button value="reader">读者</el-radio-button>
+        <el-radio-button value="author">作者</el-radio-button>
+        <el-radio-button value="admin">管理员</el-radio-button>
+      </el-radio-group>
       <el-select v-model="query.status" placeholder="全部状态" clearable style="width: 140px">
         <el-option label="正常" :value="1" />
         <el-option label="已禁用" :value="0" />

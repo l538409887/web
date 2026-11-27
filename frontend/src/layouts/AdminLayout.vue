@@ -11,6 +11,7 @@ const user = useUserStore()
 const menus = [
   { path: '/admin/dashboard', label: '数据看板' },
   { path: '/admin/books', label: '书籍管理' },
+  { path: '/admin/chapters', label: '章节审核' },
   { path: '/admin/categories', label: '分类管理' },
   { path: '/admin/users', label: '用户管理' },
   { path: '/admin/comments', label: '评论管理' },

@@ -6,7 +6,7 @@ import { getAdminComments, updateCommentStatus } from '@/api/admin'
 const loading = ref(false)
 const list = ref([])
 const total = ref(0)
-const query = reactive({ status: null, page: 1, size: 10 })
+const query = reactive({ status: null, reported: false, page: 1, size: 10 })
 
 const statusText = (value) => {
   if (value === 0) return '待审核'
@@ -24,6 +24,7 @@ async function load() {
   try {
     const params = { page: query.page, size: query.size }
     if (query.status !== null) params.status = query.status
+    if (query.reported) params.reported = true
     const data = await getAdminComments(params)
     list.value = data.list
     total.value = data.total
@@ -53,6 +54,10 @@ onMounted(load)
 <template>
   <el-card shadow="never" class="panel">
     <div class="bar">
+      <el-radio-group v-model="query.reported" @change="search">
+        <el-radio-button :value="false">全部评论</el-radio-button>
+        <el-radio-button :value="true">被举报</el-radio-button>
+      </el-radio-group>
       <el-select v-model="query.status" placeholder="全部状态" clearable style="width: 150px">
         <el-option label="显示中" :value="1" />
         <el-option label="待审核" :value="0" />

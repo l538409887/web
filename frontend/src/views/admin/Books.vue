@@ -26,16 +26,20 @@ const importVisible = ref(false)
 const importTarget = ref(null)
 
 
-const auditText = (value) => {
-  if (value === 0) return '待审核'
-  if (value === 2) return '已下架'
-  return '已上架'
+const AUDIT = {
+  0: { text: '未提交', type: 'info' },
+  1: { text: '待审核', type: 'warning' },
+  2: { text: '审核通过', type: 'success' },
+  3: { text: '审核未通过', type: 'danger' }
 }
-const auditType = (value) => {
-  if (value === 0) return 'warning'
-  if (value === 2) return 'info'
-  return 'success'
+const SHELF = {
+  0: { text: '未上架', type: 'info' },
+  1: { text: '上架审核中', type: 'warning' },
+  2: { text: '已上架', type: 'success' },
+  3: { text: '上架未通过', type: 'danger' }
 }
+const auditOf = (v) => AUDIT[v] || AUDIT[0]
+const shelfOf = (v) => SHELF[v] || SHELF[0]
 
 async function load() {
   loading.value = true
@@ -102,7 +106,27 @@ function openImport(row) {
 
 
 async function setAudit(row, value) {
-  if (value === 2) {
+  const isReject = value === 3
+  if (isReject) {
+    const ok = await confirmDialog({
+      title: '驳回这本书？',
+      message: '驳回后作者会看到「审核未通过」，作品不会出现在前台。',
+      confirmText: '驳回'
+    })
+    if (!ok) return
+  }
+  try {
+    await updateBookStatus(row.id, { audit_status: value })
+    row.audit_status = value
+    ElMessage.success(isReject ? '已驳回' : '审核通过')
+  } catch {
+    /* 拦截器已提示 */
+  }
+}
+
+async function setShelf(row, value) {
+  const isOff = value !== 2
+  if (isOff) {
     const ok = await confirmDialog({
       title: '下架这本书？',
       message: '下架后前台将无法搜索和阅读，可随时重新上架。',
@@ -111,9 +135,9 @@ async function setAudit(row, value) {
     if (!ok) return
   }
   try {
-    await updateBookStatus(row.id, { audit_status: value })
-    row.audit_status = value
-    ElMessage.success('已更新')
+    await updateBookStatus(row.id, { shelf_status: value })
+    row.shelf_status = value
+    ElMessage.success(value === 2 ? '已上架' : '已下架')
   } catch {
     /* 拦截器已提示 */
   }
@@ -143,10 +167,11 @@ onMounted(load)
           style="width: 220px"
           @keyup.enter="search"
         />
-        <el-select v-model="query.audit_status" placeholder="全部状态" clearable style="width: 140px">
-          <el-option label="已上架" :value="1" />
-          <el-option label="待审核" :value="0" />
-          <el-option label="已下架" :value="2" />
+        <el-select v-model="query.audit_status" placeholder="全部审核状态" clearable style="width: 150px">
+          <el-option label="未提交" :value="0" />
+          <el-option label="待审核" :value="1" />
+          <el-option label="审核通过" :value="2" />
+          <el-option label="审核未通过" :value="3" />
         </el-select>
         <el-button type="primary" @click="search">查询</el-button>
       </div>
@@ -165,10 +190,17 @@ onMounted(load)
       <el-table-column label="章节/字数" width="130">
         <template #default="{ row }">{{ row.chapter_count }} 章 / {{ row.word_count }} 字</template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column label="审核状态" width="110">
         <template #default="{ row }">
-          <el-tag :type="auditType(row.audit_status)" size="small">
-            {{ auditText(row.audit_status) }}
+          <el-tag :type="auditOf(row.audit_status).type" size="small">
+            {{ auditOf(row.audit_status).text }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="上架状态" width="110">
+        <template #default="{ row }">
+          <el-tag :type="shelfOf(row.shelf_status).type" size="small" effect="plain">
+            {{ shelfOf(row.shelf_status).text }}
           </el-tag>
         </template>
       </el-table-column>
@@ -182,16 +214,22 @@ onMounted(load)
       </el-table-column>
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openImport(row)">导入章节</el-button>
-          <el-button
-            v-if="row.audit_status !== 2"
-            link
-            type="danger"
-            @click="setAudit(row, 2)"
-          >
-            下架
-          </el-button>
-          <el-button v-else link type="success" @click="setAudit(row, 1)">上架</el-button>
+          <el-button link type="primary" @click="openImport(row)">导入</el-button>
+          <template v-if="row.audit_status === 1">
+            <el-button link type="success" @click="setAudit(row, 2)">通过</el-button>
+            <el-button link type="danger" @click="setAudit(row, 3)">驳回</el-button>
+          </template>
+          <template v-if="row.audit_status === 2">
+            <el-button
+              v-if="row.shelf_status !== 2"
+              link
+              type="success"
+              @click="setShelf(row, 2)"
+            >
+              上架
+            </el-button>
+            <el-button v-else link type="danger" @click="setShelf(row, 0)">下架</el-button>
+          </template>
         </template>
       </el-table-column>
     </el-table>
