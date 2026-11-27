@@ -12,7 +12,11 @@ import pathlib
 import re
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent / "app"
+BACKEND_ROOT = pathlib.Path(__file__).resolve().parent.parent
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+ROOT = BACKEND_ROOT / "app"
 PATTERN = re.compile(r"\b(\w+_service)\.(\w+)")
 
 
