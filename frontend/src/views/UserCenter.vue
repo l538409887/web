@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   changePassword,
   deleteComment,
@@ -17,12 +17,15 @@ import EmptyState from '@/components/EmptyState.vue'
 import WalletPanel from '@/components/WalletPanel.vue'
 import MyParagraphComments from '@/components/MyParagraphComments.vue'
 import MyFollows from '@/components/MyFollows.vue'
+import MyNotices from '@/components/MyNotices.vue'
 
 const router = useRouter()
 const user = useUserStore()
 const reader = useReaderStore()
 
-const tab = ref('profile')
+const route = useRoute()
+const VALID_TABS = ['profile', 'security', 'notices', 'follows', 'paragraphs', 'wallet', 'reader', 'history', 'comments']
+const tab = ref(VALID_TABS.includes(route.query.tab) ? route.query.tab : 'profile')
 const saving = ref(false)
 const uploading = ref(false)
 const form = reactive({ nickname: '', bio: '' })
@@ -236,6 +239,10 @@ onMounted(async () => {
             <span class="user__hint">修改成功后需要重新登录</span>
           </el-form-item>
         </el-form>
+      </el-tab-pane>
+
+      <el-tab-pane label="消息" name="notices">
+        <MyNotices />
       </el-tab-pane>
 
       <el-tab-pane label="我的关注" name="follows">

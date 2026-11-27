@@ -1,9 +1,10 @@
 """站点公告业务。"""
 from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BizError
-from app.models.notice import SiteNotice
+from app.models.notice import SiteNotice, UserNotice
 
 CATEGORIES = ("公告", "活动", "更新")
 
@@ -93,3 +94,77 @@ def delete(db: Session, notice_id: int) -> None:
         raise BizError(1004, "公告不存在")
     db.delete(notice)
     db.commit()
+
+# ---------------------------------------------------------------
+# 站内通知（发给具体用户）
+# ---------------------------------------------------------------
+
+
+def notify(
+    db: Session,
+    user_id: int,
+    notice_type: str,
+    title: str,
+    content: str = "",
+    link: str = "",
+) -> None:
+    """写入一条站内通知。只 add 不 commit，由调用方所在事务统一提交。"""
+    if not user_id:
+        return
+    db.add(
+        UserNotice(
+            user_id=user_id,
+            type=notice_type,
+            title=title[:150],
+            content=(content or "")[:500],
+            link=link[:200],
+            is_read=0,
+        )
+    )
+
+
+def list_my_notices(db: Session, user_id: int, page: int = 1, size: int = 10, unread_only: bool = False):
+    conditions = [UserNotice.user_id == user_id]
+    if unread_only:
+        conditions.append(UserNotice.is_read == 0)
+
+    total = int(db.scalar(select(func.count()).select_from(UserNotice).where(*conditions)) or 0)
+    rows = list(
+        db.scalars(
+            select(UserNotice)
+            .where(*conditions)
+            .order_by(UserNotice.id.desc())
+            .offset((page - 1) * size)
+            .limit(size)
+        ).all()
+    )
+    return rows, total
+
+
+def unread_count(db: Session, user_id: int) -> int:
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(UserNotice)
+            .where(UserNotice.user_id == user_id, UserNotice.is_read == 0)
+        )
+        or 0
+    )
+
+
+def mark_read(db: Session, user_id: int, notice_id: int) -> None:
+    notice = db.get(UserNotice, notice_id)
+    if notice is None or notice.user_id != user_id:
+        raise BizError(1004, "通知不存在")
+    notice.is_read = 1
+    db.commit()
+
+
+def mark_all_read(db: Session, user_id: int) -> int:
+    result = db.execute(
+        sa_update(UserNotice)
+        .where(UserNotice.user_id == user_id, UserNotice.is_read == 0)
+        .values(is_read=1)
+    )
+    db.commit()
+    return int(result.rowcount or 0)

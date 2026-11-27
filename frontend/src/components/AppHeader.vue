@@ -1,15 +1,38 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import UserAvatar from '@/components/UserAvatar.vue'
 import logo from '@/assets/logo.png'
+import { getUnreadNoticeCount } from '@/api'
 
 const router = useRouter()
 const route = useRoute()
 const user = useUserStore()
 
 const keyword = ref(route.query.keyword || '')
+const unread = ref(0)
+
+async function loadUnread() {
+  if (!user.isLogin) {
+    unread.value = 0
+    return
+  }
+  try {
+    const data = await getUnreadNoticeCount()
+    unread.value = data.unread || 0
+  } catch {
+    unread.value = 0
+  }
+}
+
+function goNotices() {
+  router.push({ path: '/user', query: { tab: 'notices' } })
+}
+
+onMounted(loadUnread)
+watch(() => user.isLogin, loadUnread)
+watch(() => route.fullPath, loadUnread)
 const isAdmin = computed(() => user.role === 'admin')
 
 watch(
@@ -52,6 +75,16 @@ async function onLogout() {
         </div>
 
         <div class="hd__user">
+          <button
+            v-if="user.isLogin"
+            class="hd__bell"
+            type="button"
+            title="站内消息"
+            @click="goNotices"
+          >
+            🔔
+            <span v-if="unread" class="hd__badge">{{ unread > 99 ? '99+' : unread }}</span>
+          </button>
           <template v-if="user.isLogin">
             <router-link class="hd__entry" to="/user">
               <UserAvatar :user="user.profile" :size="30" />
@@ -187,6 +220,31 @@ async function onLogout() {
 
 .hd__search button:hover {
   background: var(--c-primary-light);
+}
+
+.hd__bell {
+  position: relative;
+  margin-right: 10px;
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.hd__badge {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
 }
 
 .hd__user {

@@ -410,4 +410,20 @@ CREATE TABLE `content_report` (
   KEY `idx_target` (`target_type`, `target_id`),
   CONSTRAINT `fk_report_user` FOREIGN KEY (`reporter_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='内容举报';
+-- -------------------------------------------------------------
+-- 21. 站内通知
+-- -------------------------------------------------------------
+CREATE TABLE `user_notice` (
+  `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id`    BIGINT UNSIGNED NOT NULL COMMENT '接收人',
+  `type`       VARCHAR(20)     NOT NULL DEFAULT 'system' COMMENT 'audit/shelf/report/system',
+  `title`      VARCHAR(150)    NOT NULL,
+  `content`    VARCHAR(500)    NOT NULL DEFAULT '',
+  `link`       VARCHAR(200)    NOT NULL DEFAULT '',
+  `is_read`    TINYINT         NOT NULL DEFAULT 0,
+  `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_read` (`user_id`, `is_read`, `created_at`),
+  CONSTRAINT `fk_notice_user` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='站内通知';
 -- =============================================================

@@ -51,6 +51,74 @@
 
 # 日志正文
 
+## 2026-11-27 · P21 · 站内通知（审核结果主动告知）
+
+**问题**
+
+审核/上架的结果，作者只能自己去作者中心刷新才能看到——被驳回了也不知道为什么。
+
+**一、表（迁移 009）**
+
+```sql
+user_notice(id, user_id, type, title, content, link, is_read, created_at)
+```
+
+`type`：`audit` 审核 / `shelf` 上架 / `report` 举报处理 / `system` 系统。
+`link` 存站内跳转地址，点通知直接到对应页面。
+
+**二、触发点**
+
+| 事件 | 通知接收人 | 内容 |
+|---|---|---|
+| 作品审核通过 / 驳回 | 作者 | 《书名》审核通过 / 未通过 |
+| 上架通过 / 驳回 | 作者 | 《书名》已上架 / 上架申请未通过 |
+| 章节审核通过 / 驳回 | 作者 | 《书名》第 N 章审核结果 |
+| 间贴被驳回 | 间贴作者 | 你的一条间贴被驳回 + 原文摘要 |
+
+实现上是 `notice_service.notify()` 只 `add()` 不 `commit()`，
+由审核动作所在事务统一提交——**通知和状态变更要么都成功，要么都回滚**。
+
+**三、接口**
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/user/notices` | 我的通知（分页、可只看未读、返回未读总数）|
+| GET | `/user/notices/unread-count` | 顶栏红点用 |
+| PUT | `/user/notices/{id}/read` | 标记单条已读 |
+| PUT | `/user/notices/read-all` | 全部已读 |
+
+**四、前端**
+
+- 顶栏新增 🔔，带未读数红点（超过 99 显示 99+），点击跳 `/user?tab=notices`
+- 个人中心新增「消息」Tab：全部/未读切换、分类色标、未读标记、点击标记已读并跳转
+- 个人中心 Tab 支持通过 URL `?tab=` 直达
+
+**踩坑（值得记）**
+
+`PUT /user/notices/read-all` 一直 500：
+`TypeError: update() missing 2 required positional arguments: 'notice_id' and 'payload'`。
+
+原因不是没导入 `update`，而是**本模块里已经有一个 `def update(db, notice_id, payload)`**
+（改站点公告用的），把 SQLAlchemy 的 `update` **遮蔽**了。
+
+修法：`from sqlalchemy import update as sa_update`。
+
+第一次我以为是漏导入，补了 `update` 反而"更对"——因为名字确实存在，
+只是指向了错误的函数。这类错误只看报错信息很容易误判。
+
+**验证**
+
+| 场景 | 结果 |
+|---|---|
+| 驳回作品 | 作者未读 +1，内容含书名与原因 |
+| 审核通过 + 上架 | 再收 2 条（audit / shelf 各一）|
+| 章节审核通过 | 未读再 +1 |
+| 标记单条已读 | 未读 4 → 3 |
+| 全部已读 | 更新 2 条，未读 0 |
+| 越权标记他人通知 | 拒绝「通知不存在」|
+| 页面 | `/user?tab=notices` 等 3 页 200 |
+
+---
 ## 2026-11-27 · P20 · 审核与上架的界面（前端）
 
 **一、作者端：状态提醒**

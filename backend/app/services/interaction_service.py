@@ -741,6 +741,19 @@ def set_paragraph_audit(db: Session, comment_id: int, audit_status: int) -> None
         raise BizError(1004, "间贴不存在")
 
     comment.audit_status = audit_status
+
+    if audit_status == 2:
+        from app.services import notice_service
+
+        notice_service.notify(
+            db,
+            comment.user_id,
+            "report",
+            "你的一条间贴被驳回",
+            f"原因：内容不符合社区规范。原文：{comment.content[:40]}",
+            f"/read/{comment.chapter_id}",
+        )
+
     if audit_status == 2:
         # 驳回等同隐藏，书籍间贴计数一并减少（仅顶层）
         if comment.status == 1 and comment.parent_id is None:

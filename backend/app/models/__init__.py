@@ -13,7 +13,7 @@ from app.models.interaction import (
     ParagraphReaction,
 )
 from app.models.follow import AuthorFollow
-from app.models.notice import SiteNotice
+from app.models.notice import SiteNotice, UserNotice
 from app.models.report import ContentReport
 from app.models.wallet import RechargeOrder, SignIn
 

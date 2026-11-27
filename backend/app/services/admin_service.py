@@ -95,6 +95,30 @@ def update_book_status(
         book.shelf_status = shelf_status
     if is_recommend is not None:
         book.is_recommend = 1 if is_recommend else 0
+
+    # 审核/上架结果通知作者（与状态变更同一事务提交）
+    from app.services import notice_service
+
+    if audit_status in (2, 3):
+        passed = audit_status == 2
+        notice_service.notify(
+            db,
+            book.author_id,
+            "audit",
+            f"《{book.title}》{'审核通过' if passed else '审核未通过'}",
+            "可以申请上架了。" if passed else "请根据反馈修改后重新提交审核。",
+            "/author/books",
+        )
+    if shelf_status in (2, 3):
+        online = shelf_status == 2
+        notice_service.notify(
+            db,
+            book.author_id,
+            "shelf",
+            f"《{book.title}》{'已上架' if online else '上架申请未通过'}",
+            "读者现在可以在书库看到它了。" if online else "可修改后重新申请上架。",
+            "/author/books",
+        )
     db.commit()
 
 
@@ -381,4 +405,21 @@ def update_chapter_audit(db: Session, chapter_id: int, audit_status: int) -> Non
         raise BizError(3002, "章节不存在")
 
     chapter.audit_status = audit_status
+
+    if audit_status in (2, 3):
+        from app.models.book import Book
+        from app.services import notice_service
+
+        book = db.get(Book, chapter.book_id)
+        if book is not None:
+            passed = audit_status == 2
+            notice_service.notify(
+                db,
+                book.author_id,
+                "audit",
+                f"《{book.title}》第 {chapter.chapter_no} 章"
+                f"{'审核通过' if passed else '审核未通过'}",
+                chapter.title,
+                f"/author/books/{book.id}/chapters",
+            )
     db.commit()

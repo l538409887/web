@@ -11,6 +11,11 @@ export const getAuthorBooks = (id, params) => request.get(`/authors/${id}/books`
 export const followAuthor = (id) => request.post(`/authors/${id}/follow`)
 export const unfollowAuthor = (id) => request.delete(`/authors/${id}/follow`)
 export const getMyFollows = (params) => request.get('/user/follows', { params })
+
+export const getMyNotices = (params) => request.get('/user/notices', { params })
+export const getUnreadNoticeCount = () => request.get('/user/notices/unread-count')
+export const readNotice = (id) => request.put(`/user/notices/${id}/read`)
+export const readAllNotices = () => request.put('/user/notices/read-all')
 export const getCategories = () => request.get('/categories')
 
 export const getBooks = (params) => request.get('/books', { params })
