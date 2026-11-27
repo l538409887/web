@@ -51,6 +51,81 @@
 
 # 日志正文
 
+## 2026-11-27 · P15 · 事故复盘：作者端全线 500
+
+**现象**
+
+用户点作者中心「新建作品 → 保存」，弹「服务器内部错误」。
+
+**根因（我的操作失误）**
+
+上一轮做「关注作者」时，我用**整体覆盖**的方式重写了 `author_service.py`，
+新文件里只有 get_author / follow / unfollow / my_follows 四个函数，
+把原有的 11 个作者端函数全部冲掉了：
+
+```
+apply_author, create_book, update_book, list_my_books,
+list_chapters, get_chapter, create_chapter, update_chapter,
+delete_chapter, preview_chapters, import_chapters
+```
+
+后端日志：`AttributeError: module 'app.services.author_service' has no attribute 'create_book'`
+
+影响范围是整个作者中心（作品增改、章节增删改、批量导入导入），不只是新建作品。
+
+**修复**
+
+按 `author.py` 里的 11 处调用签名，逐个重建这些函数，并保留新的关注功能。
+重建时补齐了必要的业务约束：归属校验（`_own_book` / `_own_chapter`）、
+分类存在性校验、章节序号自增、逻辑删除。
+
+**顺带发现的第二个坑**
+
+重建后做回归，发现「删除章节」后书籍的章节数/字数没变（应减 1）。
+原因是会话配置了 `autoflush=False`，`recalc_stats` 里的统计 SQL
+**读不到尚未 flush 的改动**。
+
+修法：`recalc_stats` 开头加 `db.flush()`，一处修复覆盖所有调用方。
+
+**顺带发现的第三个坑**
+
+写了个静态自检脚本，扫全项目 `xxx_service.func(...)` 的调用点，发现
+`admin_service.update_comment_status` 也不存在 —— 后台「评论管理」的
+隐藏/恢复同样是 500，只是还没点到。
+
+补上该函数（隐藏顶层评论时级联隐藏其回复）。
+
+**安全网**
+
+这个项目之前没有版本控制，一次覆盖就无从恢复。现在初始化了 Git 仓库：
+
+- 首次提交 149 个源码文件（`.gitignore` 已排除 `node_modules` / `.venv` / `dist` / `.env`）
+- 提交信息：`checkpoint: 修复 author_service 被覆盖导致作者端 500`
+- 新增 `backend/scripts/check_service_refs.py`，可随时跑一遍确认没有悬空调用
+
+**验证**
+
+| 检查 | 结果 |
+|---|---|
+| 新建作品（原 500 点）| 成功，返回 id 与审核状态 |
+| 编辑作品 | 成功 |
+| 新增章节 / 章节详情 / 编辑章节 | 正常，字数正确 |
+| 分章预览 | 3 章正确解析 |
+| 批量导入 | 3 章，章节号 2~4 |
+| 章节列表（含隐藏）| 正常 |
+| 删除章节（逻辑删除）| status=0，**书籍章节数/字数正确重算** |
+| 越权改别人的书 | 拒绝「只能管理自己的作品」|
+| 后台隐藏/恢复评论（原 500 点）| 正常，库中 status 同步 |
+| 服务引用自检 | 78 个调用点，**0 缺失** |
+| 页面 | /author/books、/author/chapters、/admin/comments、/author/2 均 200 |
+
+**教训**
+
+需要给已有文件加功能时，**绝不能用整体覆盖**——必须用增量补丁或先读后改。
+这次是因为「重建一个更大的文件」图省事，代价是整个作者端不可用。
+现在有 git 兜底，但流程上要避免再犯。
+
+---
 ## 2026-11-27 · P14 · 修糊图 + 关注作者 + 投喂限额
 
 **一、轮播图糊：我自己造成的**

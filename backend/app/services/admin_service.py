@@ -239,6 +239,27 @@ def list_comments(
         conditions.append(BookComment.status == status)
     return comment_service.list_with_meta(db, conditions, page, size)
 
+
+def update_comment_status(db: Session, comment_id: int, status: int) -> None:
+    """隐藏 / 恢复书评。隐藏顶层评论时，其回复一并隐藏。"""
+    if status not in (0, 1):
+        raise BizError(1001, "status 只能是 0 隐藏 / 1 恢复")
+
+    comment = db.get(BookComment, comment_id)
+    if comment is None:
+        raise BizError(1004, "评论不存在")
+    if comment.status == status:
+        return
+
+    comment.status = status
+    if status == 0 and comment.parent_id is None:
+        db.execute(
+            update(BookComment)
+            .where(BookComment.parent_id == comment.id, BookComment.status == 1)
+            .values(status=0)
+        )
+    db.commit()
+
 # ---------------- 分类管理 ----------------
 def create_category(db: Session, name: str, sort: int) -> BookCategory:
     exists = db.scalar(select(BookCategory.id).where(BookCategory.name == name))
