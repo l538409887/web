@@ -1,0 +1,44 @@
+:root {
+  /* 品牌色：粉 */
+  --c-primary: #f24f86;
+  --c-primary-light: #ff6b9d;
+  --c-primary-soft: #fff0f5;
+  --c-accent: #ff3d71;
+  --c-accent-light: #ff6b8f;
+
+  /* 中性色 */
+  --c-bg: #f7f7f9;
+  --c-surface: #ffffff;
+  --c-border: #ededed;
+  --c-border-strong: #e2e2e2;
+  --c-text: #333333;
+  --c-text-secondary: #666666;
+  --c-text-muted: #999999;
+
+  --c-success: #3f9e6a;
+  --c-warning: #d48806;
+  --c-danger: #e34d59;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.05);
+  --shadow-hover: 0 8px 24px rgba(242, 79, 134, 0.16);
+
+  /* Element Plus 主题变量（后台统一粉色） */
+  --el-color-primary: #f24f86;
+  --el-color-primary-light-3: #ff7da6;
+  --el-color-primary-light-5: #ffa3c0;
+  --el-color-primary-light-7: #ffc9db;
+  --el-color-primary-light-8: #ffdbe7;
+  --el-color-primary-light-9: #fff0f5;
+  --el-color-primary-dark-2: #d93e73;
+  --el-border-radius-base: 4px;
+
+  /* 阅读页 */
+  --reader-bg: #ffffff;
+  --reader-text: #2b2b2b;
+  --reader-border: #ededed;
+  --reader-font-size: 18px;
+  --reader-line-height: 2;
+}

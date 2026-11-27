@@ -1,0 +1,34 @@
+# =========================================================
+#  基于 Python 的轻量化 Web 小说平台 · 后端依赖
+#  安装：pip install -r requirements.txt
+#
+#  版本策略：
+#    这里只写「最低版本」，让 pip 自动挑选与当前 Python 版本
+#    匹配的最新 wheel（本机是 Python 3.14，写死旧版本会缺 wheel）。
+#
+#  首次安装成功后，请锁一次实际版本：
+#    pip freeze > requirements.lock.txt
+#    之后换机器/答辩前重装，用 lock 文件保证一致。
+# =========================================================
+
+# --- Web 框架 ---
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# --- 数据访问 ---
+SQLAlchemy>=2.0.30
+PyMySQL>=1.1.1
+
+# --- 数据校验与配置 ---
+pydantic>=2.7
+pydantic-settings>=2.3
+
+# --- 认证与安全 ---
+PyJWT>=2.8
+cryptography>=42.0
+
+# --- 文件上传（表单解析）---
+python-multipart>=0.0.9
+
+# --- 日志 ---
+loguru>=0.7.2
