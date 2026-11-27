@@ -51,6 +51,62 @@
 
 # 日志正文
 
+## 2026-11-27 · P17 · 做到「clone 下来照着做就能跑」
+
+**目标**
+
+用户要求：别人 clone 仓库、建完表就能直接用，前置条件要写明白（Python 版本、建表步骤等）。
+
+**交付物**
+
+| 文件 | 作用 |
+|---|---|
+| `SETUP.md` | 主文档：环境要求表、4 步操作、验证清单、8 条常见问题 |
+| `scripts/init_db.ps1` / `.sh` | 一键建库：按序执行 4 个 SQL 并打印校验结果 |
+| `backend/scripts/check_env.py` | 环境自检：Python 版本 / 依赖 / .env / 数据库连通与表数量 |
+| `backend/requirements.lock.txt` | 30 个包的精确版本（含传递依赖），用于 100% 复现 |
+| `frontend/package.json` | 增加 `engines`：node >=18、npm >=9 |
+
+`requirements.txt` 保留原来的 `>=` 策略（Python 3.14 写死旧版本会缺 wheel），
+另附 lock 文件给需要严格复现的场景——这是文件里原本就写好的思路，照它执行。
+
+**踩了四个坑，都写进了脚本和文档**
+
+1. **mysql 的 `source` 打不开中文绝对路径**
+   报 `Failed to open file ... error: 2`（文件明明存在）。
+   改为：先 `cd db/`，再用相对文件名 `source schema.sql`。已验证可行。
+
+2. **PowerShell 不支持 `<` 输入重定向**
+   `mysql -u root -p < db/schema.sql` 在 PS 里是**语法错误**
+   （`RedirectionNotSupported`），原 README 这么写会让人直接卡住。
+   文档统一改成 `-e "source db/schema.sql"`，并注明 cmd/bash 可用 `<`。
+
+3. **.ps1 不带 BOM 时 PowerShell 5.1 按 ANSI 解析**
+   中文注释和中文 SQL 里的字节被误读，直接把 here-string 结构冲坏，
+   语法检查报「意外的标记 }」和「AS」。
+   解法：脚本必须以 **UTF-8 with BOM** 保存。已验证语法通过。
+
+4. **`ConvertTo-Json` 会转义 `>=` 并重排整个 JSON**
+   给 `package.json` 加 `engines` 时被写成 `"\u003e=18"`，格式也全乱。
+   改为 git 还原后做文本插入，保持原格式。
+
+**验证**
+
+| 检查 | 结果 |
+|---|---|
+| `check_env.py` | 全部通过（Python 3.14.5 / 14 项配置 / 19 表 / 23 本书）|
+| `init_db.ps1` 语法 | 通过（带 BOM）|
+| `source` 相对路径 | 实测可用 |
+| 中文列别名显示 | 正常 |
+| `package.json` | JSON 合法 |
+| 文档中的 `<` 重定向 | 仅保留在「cmd/bash 可用」的说明里 |
+
+**说明**
+
+本机 `bash` 指向 WSL，无法直接 `bash -n` 校验 `.sh` 脚本，
+该脚本语法较简单，未做端到端执行验证（会清库，不宜在现有数据上跑）。
+
+---
 ## 2026-11-27 · P16 · 仓库可复现性整理（README + .env 模板）
 
 **背景**

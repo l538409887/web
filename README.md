@@ -124,87 +124,41 @@
 
 ## 六、快速开始
 
-### 1. 准备数据库
+> 完整的搭建步骤、常见问题、验证清单见 **[SETUP.md](SETUP.md)**。
+> 这里只给最短路径。
 
-> ⚠️ **警告**：`schema.sql` 里包含 `DROP TABLE IF EXISTS`，`seed.sql` 里包含 `TRUNCATE`。
-> 这两步**会清空已有的同名表**，只能在**全新环境**执行。
-> 已有数据的库请跳过，改用 `db/migrations/` 增量升级。
-
-```bash
-# ① 建库 + 建表（19 张）—— 注意：会先 DROP 再建
-mysql -u root -p < db/schema.sql
-
-# ② 创建最小权限账号 novel_app（应用连库用它，不用 root）
-#    密码不要写进这个文件，实际密码放在 backend/.env
-mysql -u root -p < db/00_create_user.sql
-
-# ③ 首批演示数据（12 本书 / 357 章 / 6 个账号）—— 注意：会先 TRUNCATE
-mysql -u root -p novel_platform < db/seed.sql
-
-# ④ 补充 10 本书：首页「好书精选 / 精品力荐 / 新秀小说」三个书区需要 22 本
-mysql -u root -p novel_platform < db/demo_extra_books.sql
-```
-
-> 如果数据库是**早期版本**（缺少付费 / 间贴 / 关注等表），不要重建，
-> 按顺序执行 `db/migrations/001~006` 增量脚本即可。
-
-### 2. 启动后端
+**环境要求**：Python ≥ 3.11（实测 3.14.5）、Node ≥ 18（实测 24.15）、MySQL ≥ 8.0（实测 8.0.26）
 
 ```bash
+# ① 建库（一键脚本，Windows）
+pwsh scripts/init_db.ps1
+#    Linux/macOS 用：bash scripts/init_db.sh
+
+# ② 后端
 cd backend
-copy .env.example .env      # Windows；Linux/macOS 用 cp
-# 编辑 .env：修改 SECRET_KEY 和 DATABASE_URL 里的密码
-
+copy .env.example .env        # 改 DATABASE_URL 密码 + SECRET_KEY
 python -m venv .venv
-.venv\Scripts\activate      # Windows；Linux/macOS 用 source .venv/bin/activate
+.venv\Scripts\activate
 pip install -r requirements.txt
-
-python scripts/check_service_refs.py   # 可选：静态自检，确认没有悬空调用
+python scripts/check_env.py   # 环境自检，全绿再启动
 uvicorn main:app --reload --port 8000
-```
 
-### 3. 启动前端
-
-```bash
-cd frontend
+# ③ 前端
+cd ../frontend
 npm install
 npm run dev
 ```
-
-### 4. 访问
 
 | 服务 | 地址 |
 |---|---|
 | 前端 | http://localhost:5173 |
 | 后端 API | http://localhost:8000 |
-| 接口文档（自动生成） | http://localhost:8000/docs |
+| 接口文档 | http://localhost:8000/docs |
+| 健康检查 | http://localhost:8000/health |
 
-### 5. 演示账号
-
-| 角色 | 账号 | 密码 | 说明 |
-|---|---|---|---|
-| 管理员 | `admin` | `admin123` | 后台：书籍审核、用户、评论、间贴、公告、充值订单 |
-| 作者 | `author1` | `author123` | 青衫客，8 部作品 |
-| 作者 | `author2` | `author123` | 白露未晞 |
-| 作者 | `author3` | `author123` | 南山旧友 |
-| 读者 | `reader1` | `reader123` | 已购书架、阅读进度 |
-| 读者 | `reader2` | `reader123` | — |
-
-> ⚠️ `POST /author/apply` 是**自助升级**，点一下reader就会变成author。
-> 如果 reader1 登录后进不了读者视角，多半是测试时点过升级。
-
-### 6. 常见问题
-
-| 现象 | 原因与处理 |
-|---|---|
-| 启动报 `Access denied for user 'novel_app'` | 没执行 `db/00_create_user.sql`，或 `.env` 里密码不一致 |
-| 前端 502 / 接口跨域 | 后端没起来，或 `.env` 的 `CORS_ORIGINS` 不含 `http://localhost:5173` |
-| 首页某个书区空白 | 没导入 `db/demo_extra_books.sql`，书不够 22 本 |
-| 上传统提示 413 | `.env` 的 `MAX_UPLOAD_SIZE_MB` 太小 |
-| 充值页没有二维码 | 把微信收款码命名为 `wechat.png` 放到 `backend/static/pay/` |
+**演示账号**：`admin/admin123`、`author1~3/author123`、`reader1~2/reader123`
 
 ---
-
 ## 七、许可证与声明
 
 本项目为教学 / 毕业设计用途。演示数据须使用**公有领域作品**（如四大名著、鲁迅作品、凡尔纳译本）或自行生成，**不得**使用受版权保护的网络小说正文。
