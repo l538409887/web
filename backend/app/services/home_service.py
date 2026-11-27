@@ -8,7 +8,7 @@ from app.services import book_service
 RANK_MAP = {
     "click": Book.click_count.desc(),
     "collect": Book.collect_count.desc(),
-    "recommend": Book.recommend_count.desc(),
+    "recommend": Book.watermelon_count.desc(),
     "watermelon": Book.watermelon_count.desc(),
     "subscribe": Book.revenue_coin.desc(),
     "comment": Book.paragraph_comment_count.desc(),

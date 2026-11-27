@@ -22,6 +22,14 @@ FIELDS = {
     "recommend": "recommendations",
 }
 
+# 别名：前端路由用 watermelon 表示「投喂西瓜」，与 recommend 同义。
+# 早期没有这层映射，导致 /rank/period?metric=watermelon 直接报参数错误。
+ALIASES = {"watermelon": "recommend"}
+
+
+def normalize_metric(metric: str) -> str:
+    return ALIASES.get(metric, metric)
+
 # 周期 -> 天数（含今天）
 PERIOD_DAYS = {"week": 7, "month": 30}
 
@@ -55,6 +63,7 @@ def period_top(
     db: Session, metric: str = "click", period: str = "week", limit: int = 20
 ) -> list[dict]:
     """按周期聚合出榜单：[{"book": Book, "value": int}, ...]"""
+    metric = normalize_metric(metric)
     column_name = FIELDS.get(metric)
     if not column_name:
         raise BizError(1001, f"metric 只能是 {'/'.join(FIELDS)}")

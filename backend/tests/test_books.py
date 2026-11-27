@@ -142,3 +142,94 @@ def test_follow_author(client, author, reader):
     client.delete(f"/api/v1/authors/{author['id']}/follow", headers=reader["headers"])
     follows = client.get("/api/v1/user/follows", headers=reader["headers"]).json()["data"]
     assert author["id"] not in [item["id"] for item in follows["list"]]
+
+# ---------------- 推荐榜口径（回归：曾因两个计数列分裂导致投喂不进榜）----------------
+
+
+def test_rank_period_accepts_watermelon_alias(client):
+    """前端路由用 watermelon 表示投喂西瓜，接口应接受该别名。"""
+    resp = client.get(
+        "/api/v1/rank/period", params={"metric": "watermelon", "period": "week"}
+    )
+    assert resp.json()["code"] == 0
+
+    canonical = client.get(
+        "/api/v1/rank/period", params={"metric": "recommend", "period": "week"}
+    )
+    assert canonical.json()["code"] == 0
+
+    # 两种写法结果一致
+    alias_ids = [item["book"]["id"] for item in resp.json()["data"]["list"]]
+    canon_ids = [item["book"]["id"] for item in canonical.json()["data"]["list"]]
+    assert alias_ids == canon_ids
+
+
+def test_feed_watermelon_updates_counter_and_rank(
+    client, author, reader, make_book, approve_book, db
+):
+    """投喂后：watermelon_count 增加，且周榜「推荐」立刻反映。"""
+    from sqlalchemy import text
+
+    book_id = make_book(author, title="投喂测试书")
+    approve_book(book_id)
+
+    db.execute(
+        text("UPDATE sys_user SET watermelon = 20 WHERE id = :i"), {"i": reader["id"]}
+    )
+    db.commit()
+
+    def week_value():
+        data = client.get(
+            "/api/v1/rank/period",
+            params={"metric": "recommend", "period": "week", "limit": 50},
+        ).json()["data"]["list"]
+        for item in data:
+            if item["book"]["id"] == book_id:
+                return item["value"]
+        return 0
+
+    before = week_value()
+
+    # 每本书每天最多 2 个
+    resp = client.post(
+        f"/api/v1/books/{book_id}/feed-watermelon",
+        json={"count": 2},
+        headers=reader["headers"],
+    )
+    assert resp.json()["code"] == 0, resp.json()
+
+    counter = db.execute(
+        text("SELECT watermelon_count FROM book WHERE id = :i"), {"i": book_id}
+    ).scalar()
+    assert counter == 2
+
+    assert week_value() == before + 2
+
+
+def test_recommend_sort_uses_watermelon_count(client, author, make_book, approve_book, db):
+    """总榜 sort=recommend 与 sort=watermelon 应指向同一列。"""
+    from sqlalchemy import text
+
+    book_id = make_book(author, title="排序口径书")
+    approve_book(book_id)
+    db.execute(
+        text("UPDATE book SET watermelon_count = 99999 WHERE id = :i"), {"i": book_id}
+    )
+    db.commit()
+
+    for sort in ("recommend", "watermelon"):
+        data = client.get("/api/v1/books", params={"sort": sort, "size": 1}).json()["data"]
+        assert data["list"][0]["id"] == book_id, f"sort={sort} 未按 watermelon_count 排序"
+
+def test_subscribe_and_comment_rank_exclude_zero(client, author, make_book, approve_book):
+    """订阅榜 / 吐槽榜不应把「值为 0」的书排进来。"""
+    book_id = make_book(author, title="零值书")
+    approve_book(book_id)
+
+    for sort in ("subscribe", "comment"):
+        data = client.get("/api/v1/books", params={"sort": sort, "size": 50}).json()["data"]
+        ids = [item["id"] for item in data["list"]]
+        assert book_id not in ids, f"sort={sort} 把零值书排进了榜单"
+        for item in data["list"]:
+            value = item["revenue_coin"] if sort == "subscribe" else item["paragraph_comment_count"]
+            assert value > 0, f"sort={sort} 出现值为 0 的条目"

@@ -23,6 +23,10 @@ const PERIOD_TABS = [
 // 这三个榜有按天流水，可以切周期；新书榜/更新榜是另外的口径
 const PERIOD_KEYS = ['click', 'collect', 'watermelon']
 
+// 路由 key 与后端 metric 名不是一一对应：
+// 后端只有 click / collect / recommend，「投喂西瓜」在接口里叫 recommend。
+const METRIC_OF = { click: 'click', collect: 'collect', watermelon: 'recommend' }
+
 const DEFS = {
   click: { label: '点击榜', field: 'click_count', tip: '按点击量排序', unit: '次' },
   collect: { label: '收藏榜', field: 'collect_count', tip: '按被加入书架的次数排序', unit: '次' },
@@ -107,7 +111,7 @@ async function load() {
       const data = await getMonthlyRank(50)
       rows.value = data.map((item) => ({ ...item.book, _extra: `${formatCount(item.words)} 字` }))
     } else if (PERIOD_KEYS.includes(key) && period.value !== 'all') {
-      const data = await getPeriodRank(key, period.value, 50)
+      const data = await getPeriodRank(METRIC_OF[key] || key, period.value, 50)
       const unit = current.value.unit || '次'
       rows.value = data.list.map((item) => ({
         ...item.book,

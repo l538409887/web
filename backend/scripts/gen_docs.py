@@ -123,6 +123,7 @@ MIGRATIONS = """\
 | 010 | `010_sensitive_word.sql` | 敏感词库 |
 | 011 | `011_book_daily_stat.sql` | 每日统计（周/月榜数据源） |
 | 012 | `012_notice_cover.sql` | 公告封面图 |
+| 013 | `013_unify_watermelon_count.sql` | 统一「投喂西瓜」计数口径（合并 recommend_count 历史值）|
 """
 
 ERROR_CODES = """\

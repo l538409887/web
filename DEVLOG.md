@@ -51,6 +51,71 @@
 
 # 日志正文
 
+## 2026-11-27 · P33 · 修推荐榜：一个参数名 + 一个计数口径
+
+**怎么发现的**
+
+用户在推荐榜页面截图，顶部一条红字：
+`metric 只能是 click/collect/recommend`，下面「榜单暂无数据」。
+
+**根因是两个 bug 叠在一起**
+
+**Bug 1：参数名对不上**
+
+前端路由 key 是 `watermelon`（投喂西瓜），调 `/rank/period` 时直接把它当 `metric` 传。
+后端只接受 `click / collect / recommend`，于是 1001 参数错误，列表为空。
+
+修法：前端加映射表（路由 key → 接口 metric），后端同时接受 `watermelon` 作为
+`recommend` 的别名——两边都兜住，以后谁先改都不会再炸。
+
+**Bug 2：两个计数列各记一套（更严重）**
+
+| 列 | 谁在写 | 谁在读 |
+|---|---|---|
+| `watermelon_count` | 投喂接口 `+n` | 书籍列表 `sort=watermelon`、榜单、详情页 |
+| `recommend_count` | **没人写**（只有种子数据）| 首页推荐位、`sort=recommend` |
+
+结果：**投喂了西瓜，推荐数纹丝不动**；而首页显示的「推荐」是种子数据里写死的值。
+两个字段指的是同一件事，却各有一份数。
+
+修法（迁移 013）：
+
+```sql
+UPDATE book SET watermelon_count = recommend_count WHERE recommend_count > watermelon_count;
+ALTER TABLE book MODIFY recommend_count ... COMMENT '已废弃：历史推荐数，统一用 watermelon_count';
+```
+
+并把 `sort=recommend` 也指向 `watermelon_count`，让「推荐」只认一个列。
+
+**顺手修的两处数据/展示问题**
+
+1. **计数与实际不符**：山河剑歌显示 4 条间贴，库里却 0 条
+   （之前清理间贴时没重置冗余计数）。
+   → 补了 12 条真实间贴（`db/demo_paragraph_comments.sql`），并按真实数据重算全部计数。
+
+2. **榜单被 0 值书凑数**：订阅榜只有 1 本书有收入、吐槽榜只有 2 本有间贴，
+   但接口仍返回 22 条（后面全是 0）。
+   → `sort=subscribe` / `sort=comment` 增加 `值 > 0` 过滤。
+
+**新增 4 个回归用例**
+
+| 用例 | 防的是 |
+|---|---|
+| `test_rank_period_accepts_watermelon_alias` | 别名失效又报参数错误 |
+| `test_feed_watermelon_updates_counter_and_rank` | 投喂后计数不变、榜单不更新 |
+| `test_recommend_sort_uses_watermelon_count` | 排序又回去读废弃列 |
+| `test_subscribe_and_comment_rank_exclude_zero` | 榜单又被 0 值填充 |
+
+**教训**
+
+这两个 bug 都**不会报错**——一个是参数校验错误被前端 toast 掉了，
+另一个是「数值不对但接口 200」。
+前者靠肉眼看页面才发现，后者连页面都不会提示。
+
+所以补的测试都是「行为级」的：不是断言接口 200，而是断言
+**投喂之后榜单里的数值确实变了**。
+
+---
 ## 2026-11-27 · P32 · 源码阅读路线
 
 **问题**

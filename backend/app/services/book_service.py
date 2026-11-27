@@ -11,7 +11,9 @@ SORT_MAP = {
     "update": Book.last_update_at.desc(),
     "click": Book.click_count.desc(),
     "collect": Book.collect_count.desc(),
-    "recommend": Book.recommend_count.desc(),
+    # 「推荐」与「投喂西瓜」是同一件事，统一读 watermelon_count。
+    # recommend_count 是早期种子字段，业务已不再维护。
+    "recommend": Book.watermelon_count.desc(),
     "new": Book.created_at.desc(),
     "word": Book.word_count.desc(),
     "subscribe": Book.revenue_coin.desc(),
@@ -58,6 +60,13 @@ def list_books(
         join_author = True
         if sort == "update":
             sort = "click"
+
+    # 「订阅榜 / 吐槽榜」只保留真正有数据的书。
+    # 否则按收入/间贴数排序时，后面会跟一串 0，看起来像凑数。
+    if sort == "subscribe":
+        conditions.append(Book.revenue_coin > 0)
+    elif sort == "comment":
+        conditions.append(Book.paragraph_comment_count > 0)
 
     count_stmt = select(func.count()).select_from(Book).where(*conditions)
     if join_author:
