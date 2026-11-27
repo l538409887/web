@@ -5,8 +5,11 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   changePassword,
   deleteComment,
+  getAuthor,
   getHistory,
   getMyComments,
+  getMyFollows,
+  getShelf,
   updateProfile,
   uploadImage
 } from '@/api'
@@ -20,11 +23,21 @@ import MyFollows from '@/components/MyFollows.vue'
 import MyNotices from '@/components/MyNotices.vue'
 
 const router = useRouter()
+const route = useRoute()
 const user = useUserStore()
 const reader = useReaderStore()
 
-const route = useRoute()
-const VALID_TABS = ['profile', 'security', 'notices', 'follows', 'paragraphs', 'wallet', 'reader', 'history', 'comments']
+const VALID_TABS = [
+  'profile',
+  'security',
+  'notices',
+  'follows',
+  'paragraphs',
+  'wallet',
+  'reader',
+  'history',
+  'comments'
+]
 const tab = ref(VALID_TABS.includes(route.query.tab) ? route.query.tab : 'profile')
 const saving = ref(false)
 const uploading = ref(false)
@@ -42,6 +55,9 @@ const commentTotal = ref(0)
 const commentPage = ref(1)
 const commentSize = 10
 
+// 顶部数据条：书架 / 足迹 / 关注 / 粉丝
+const stats = reactive({ shelf: 0, history: 0, follows: 0, fans: 0 })
+
 const profile = computed(() => user.profile || {})
 const initial = computed(() => (profile.value.nickname || profile.value.username || '读').slice(0, 1))
 
@@ -49,6 +65,49 @@ const roleLabel = computed(() => {
   const map = { reader: '读者', author: '作者', admin: '管理员' }
   return map[profile.value.role] || '读者'
 })
+
+/** 书龄：按注册时间算天数 */
+const ageDays = computed(() => {
+  const created = profile.value.created_at
+  if (!created) return 0
+  const start = new Date(String(created).replace(' ', 'T'))
+  if (Number.isNaN(start.getTime())) return 0
+  return Math.max(0, Math.floor((Date.now() - start.getTime()) / 86400000))
+})
+
+const ageLabel = computed(() => {
+  const days = ageDays.value
+  if (!days) return '今天加入'
+  if (days < 30) return `书龄 ${days} 天`
+  if (days < 365) return `书龄 ${Math.floor(days / 30)} 个月`
+  return `书龄 ${(days / 365).toFixed(1)} 年`
+})
+
+// 左侧导航：与猫站一致，第一项「我的书架」直接跳到独立书架页
+const NAV = [
+  { key: 'shelf', icon: '📚', label: '我的书架', to: '/shelf' },
+  { key: 'notices', icon: '✉️', label: '我的消息' },
+  { key: 'comments', icon: '⭐', label: '我的书评' },
+  { key: 'paragraphs', icon: '💭', label: '我的间贴' },
+  { key: 'wallet', icon: '👛', label: '钱包君' },
+  { key: 'follows', icon: '👥', label: '我的关注' },
+  { key: 'history', icon: '🕘', label: '阅读记录' },
+  { key: 'reader', icon: '⚙️', label: '阅读设置' },
+  { key: 'profile', icon: '🙂', label: '基本资料' },
+  { key: 'security', icon: '🔒', label: '账号安全' }
+]
+
+const CURRENT_TITLE = {
+  profile: '基本资料',
+  security: '账号安全',
+  notices: '我的消息',
+  follows: '我的关注',
+  paragraphs: '我的间贴',
+  wallet: '钱包君',
+  reader: '阅读设置',
+  history: '阅读记录',
+  comments: '我的书评'
+}
 
 const themes = [
   { key: 'white', label: '白', color: '#FFFFFF' },
@@ -60,6 +119,29 @@ const themes = [
 function fillForm() {
   form.nickname = profile.value.nickname || ''
   form.bio = profile.value.bio || ''
+}
+
+async function loadStats() {
+  try {
+    const [shelf, history, follows] = await Promise.all([
+      getShelf({ page: 1, size: 1 }),
+      getHistory(50),
+      getMyFollows({ page: 1, size: 1 })
+    ])
+    stats.shelf = shelf.total || 0
+    stats.history = (history.list || []).length
+    stats.follows = follows.total || 0
+
+    // 粉丝数只有作者/管理员才有意义
+    if (['author', 'admin'].includes(profile.value.role) && profile.value.id) {
+      const author = await getAuthor(profile.value.id)
+      stats.fans = author.follower_count || 0
+    } else {
+      stats.fans = 0
+    }
+  } catch {
+    /* 统计失败不影响页面 */
+  }
 }
 
 async function saveProfile() {
@@ -165,171 +247,252 @@ async function removeComment(row) {
   }
 }
 
+function switchTab(name) {
+  if (!VALID_TABS.includes(name)) return
+  tab.value = name
+  onTabChange(name)
+}
+
 function onTabChange(name) {
   if (name === 'history' && !historyList.value.length) loadHistory()
   if (name === 'comments' && !commentList.value.length) loadComments()
+}
+
+async function doLogout() {
+  await user.doLogout()
+  router.push('/')
 }
 
 onMounted(async () => {
   if (!user.profile) await user.fetchMe()
   fillForm()
   reader.applyTheme()
+  loadStats()
+  onTabChange(tab.value)
 })
 </script>
 
 <template>
-  <div class="container user">
-    <div class="user__hero">
-      <label class="user__avatar">
+  <div class="container uc">
+    <!-- 顶部深色头图：昵称 / 角色 / 快捷按钮 / 数据条 / 头像压边 -->
+    <section class="hero">
+      <h1 class="hero__name">{{ profile.nickname || profile.username }}</h1>
+      <p class="hero__sub">{{ roleLabel }} · {{ ageLabel }} · {{ profile.username }}</p>
+
+      <div class="hero__btns">
+        <button class="hero__btn hero__btn--primary" type="button" @click="switchTab('wallet')">
+          充值
+        </button>
+        <button class="hero__btn hero__btn--ghost" type="button" @click="doLogout">退出</button>
+      </div>
+
+      <div class="hero__stats">
+        <button class="stat" type="button" @click="router.push('/shelf')">
+          <span class="stat__num">{{ stats.shelf }}</span>
+          <span class="stat__label">书架</span>
+        </button>
+        <button class="stat" type="button" @click="switchTab('history')">
+          <span class="stat__num">{{ stats.history }}</span>
+          <span class="stat__label">足迹</span>
+        </button>
+        <button class="stat" type="button" @click="switchTab('follows')">
+          <span class="stat__num">{{ stats.follows }}</span>
+          <span class="stat__label">关注</span>
+        </button>
+        <button class="stat" type="button" @click="switchTab('follows')">
+          <span class="stat__num">{{ stats.fans }}</span>
+          <span class="stat__label">粉丝</span>
+        </button>
+      </div>
+
+      <label class="hero__avatar">
         <input type="file" accept="image/*" @change="onAvatarChange" />
         <img v-if="profile.avatar" :src="profile.avatar" :alt="profile.nickname" />
-        <span v-else class="user__avatar-text">{{ initial }}</span>
-        <span class="user__avatar-mask">{{ uploading ? '上传中…' : '更换' }}</span>
+        <span v-else class="hero__avatar-text">{{ initial }}</span>
+        <span class="hero__avatar-mask">{{ uploading ? '上传中…' : '更换' }}</span>
       </label>
+    </section>
 
-      <div class="user__intro">
-        <h1 class="user__name">{{ profile.nickname || profile.username }}</h1>
-        <p class="user__meta">
-          {{ profile.username }}
-          <el-tag size="small" effect="plain">{{ roleLabel }}</el-tag>
-          <span v-if="profile.email">· {{ profile.email }}</span>
-        </p>
-        <p v-if="profile.bio" class="user__bio">{{ profile.bio }}</p>
-      </div>
-    </div>
+    <div class="uc__body">
+      <!-- 左侧竖导航 -->
+      <aside class="side">
+        <nav class="side__nav">
+          <component
+            :is="item.to ? 'router-link' : 'button'"
+            v-for="item in NAV"
+            :key="item.key"
+            :to="item.to"
+            class="side__item"
+            :class="{ 'side__item--on': !item.to && tab === item.key }"
+            @click="!item.to && switchTab(item.key)"
+          >
+            <span class="side__ico">{{ item.icon }}</span>
+            <span class="side__label">{{ item.label }}</span>
+          </component>
+        </nav>
 
-    <el-tabs v-model="tab" class="user__tabs" @tab-change="onTabChange">
-      <el-tab-pane label="资料" name="profile">
-        <el-form label-width="90px" class="user__form">
-          <el-form-item label="昵称">
-            <el-input v-model="form.nickname" maxlength="20" show-word-limit />
-          </el-form-item>
-          <el-form-item label="个性简介">
-            <el-input v-model="form.bio" type="textarea" :rows="3" maxlength="120" show-word-limit />
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" :loading="saving" @click="saveProfile">保存资料</el-button>
-          </el-form-item>
-        </el-form>
+        <div class="side__recent">
+          <h3 class="side__recent-title">最近阅读</h3>
+          <ul v-if="historyList.length" class="side__recent-list">
+            <li v-for="item in historyList.slice(0, 3)" :key="item.book.id">
+              <router-link :to="`/read/${item.chapter.id}`">{{ item.book.title }}</router-link>
+            </li>
+          </ul>
+          <p v-else class="side__recent-empty">暂无阅读记录</p>
+        </div>
+      </aside>
 
-        <el-descriptions :column="2" border class="user__info">
-          <el-descriptions-item label="用户名">{{ profile.username }}</el-descriptions-item>
-          <el-descriptions-item label="账号角色">{{ roleLabel }}</el-descriptions-item>
-          <el-descriptions-item label="邮箱">{{ profile.email || '未绑定' }}</el-descriptions-item>
-          <el-descriptions-item label="注册时间">{{ profile.created_at }}</el-descriptions-item>
-          <el-descriptions-item label="最后登录" :span="2">
-            {{ profile.last_login_at || '—' }}
-          </el-descriptions-item>
-        </el-descriptions>
-      </el-tab-pane>
+      <!-- 右侧内容区 -->
+      <main class="main">
+        <h2 class="main__title">{{ CURRENT_TITLE[tab] }}</h2>
 
-      <el-tab-pane label="账号安全" name="security">
-        <el-form label-width="90px" class="user__form">
-          <el-form-item label="原密码">
-            <el-input v-model="pwd.old" type="password" autocomplete="current-password" show-password />
-          </el-form-item>
-          <el-form-item label="新密码">
-            <el-input v-model="pwd.new" type="password" autocomplete="new-password" show-password placeholder="至少 6 位" />
-          </el-form-item>
-          <el-form-item label="确认新密码">
-            <el-input v-model="pwd.confirm" type="password" autocomplete="new-password" show-password />
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" :loading="pwdSaving" @click="savePassword">修改密码</el-button>
-            <span class="user__hint">修改成功后需要重新登录</span>
-          </el-form-item>
-        </el-form>
-      </el-tab-pane>
+        <!-- 基本资料 -->
+        <div v-if="tab === 'profile'" class="pane">
+          <el-form label-width="90px" class="form">
+            <el-form-item label="昵称">
+              <el-input v-model="form.nickname" maxlength="20" show-word-limit />
+            </el-form-item>
+            <el-form-item label="个性简介">
+              <el-input
+                v-model="form.bio"
+                type="textarea"
+                :rows="3"
+                maxlength="120"
+                show-word-limit
+              />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="saving" @click="saveProfile">保存资料</el-button>
+            </el-form-item>
+          </el-form>
 
-      <el-tab-pane label="消息" name="notices">
-        <MyNotices />
-      </el-tab-pane>
+          <el-descriptions :column="2" border class="desc">
+            <el-descriptions-item label="账户名">{{ profile.username }}</el-descriptions-item>
+            <el-descriptions-item label="账号角色">{{ roleLabel }}</el-descriptions-item>
+            <el-descriptions-item label="邮箱">{{ profile.email || '未绑定' }}</el-descriptions-item>
+            <el-descriptions-item label="注册时间">{{ profile.created_at }}</el-descriptions-item>
+            <el-descriptions-item label="最后登录" :span="2">
+              {{ profile.last_login_at || '—' }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
 
-      <el-tab-pane label="我的关注" name="follows">
-        <MyFollows />
-      </el-tab-pane>
+        <!-- 账号安全 -->
+        <div v-else-if="tab === 'security'" class="pane">
+          <el-form label-width="90px" class="form">
+            <el-form-item label="原密码">
+              <el-input
+                v-model="pwd.old"
+                type="password"
+                autocomplete="current-password"
+                show-password
+              />
+            </el-form-item>
+            <el-form-item label="新密码">
+              <el-input
+                v-model="pwd.new"
+                type="password"
+                autocomplete="new-password"
+                show-password
+                placeholder="至少 6 位"
+              />
+            </el-form-item>
+            <el-form-item label="确认新密码">
+              <el-input
+                v-model="pwd.confirm"
+                type="password"
+                autocomplete="new-password"
+                show-password
+              />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="pwdSaving" @click="savePassword">
+                修改密码
+              </el-button>
+              <span class="hint">修改成功后需要重新登录</span>
+            </el-form-item>
+          </el-form>
+        </div>
 
-      <el-tab-pane label="我的间贴" name="paragraphs">
-        <MyParagraphComments />
-      </el-tab-pane>
+        <MyNotices v-else-if="tab === 'notices'" />
+        <MyFollows v-else-if="tab === 'follows'" />
+        <MyParagraphComments v-else-if="tab === 'paragraphs'" />
+        <WalletPanel v-else-if="tab === 'wallet'" />
 
-      <el-tab-pane label="钱包" name="wallet">
-        <WalletPanel />
-      </el-tab-pane>
+        <!-- 阅读设置 -->
+        <div v-else-if="tab === 'reader'" class="pane">
+          <div class="reader-set">
+            <div class="reader-set__row">
+              <span class="reader-set__label">字号</span>
+              <el-slider
+                :model-value="reader.settings.fontSize"
+                :min="14"
+                :max="24"
+                :step="2"
+                show-stops
+                @update:model-value="(v) => reader.setFontSize(v)"
+              />
+              <span class="reader-set__value">{{ reader.settings.fontSize }}px</span>
+            </div>
 
-      <el-tab-pane label="阅读设置" name="reader">
-        <div class="reader-set">
-          <div class="reader-set__row">
-            <span class="reader-set__label">字号</span>
-            <el-slider
-              :model-value="reader.settings.fontSize"
-              :min="14"
-              :max="24"
-              :step="2"
-              show-stops
-              @update:model-value="(v) => reader.setFontSize(v)"
-            />
-            <span class="reader-set__value">{{ reader.settings.fontSize }}px</span>
-          </div>
+            <div class="reader-set__row">
+              <span class="reader-set__label">行距</span>
+              <el-slider
+                :model-value="reader.settings.lineHeight * 10"
+                :min="16"
+                :max="24"
+                :step="2"
+                show-stops
+                @update:model-value="(v) => reader.setLineHeight(v / 10)"
+              />
+              <span class="reader-set__value">{{ reader.settings.lineHeight.toFixed(1) }}</span>
+            </div>
 
-          <div class="reader-set__row">
-            <span class="reader-set__label">行距</span>
-            <el-slider
-              :model-value="reader.settings.lineHeight * 10"
-              :min="16"
-              :max="24"
-              :step="2"
-              show-stops
-              @update:model-value="(v) => reader.setLineHeight(v / 10)"
-            />
-            <span class="reader-set__value">{{ reader.settings.lineHeight.toFixed(1) }}</span>
-          </div>
+            <div class="reader-set__row">
+              <span class="reader-set__label">背景</span>
+              <div class="reader-set__themes">
+                <button
+                  v-for="theme in themes"
+                  :key="theme.key"
+                  class="reader-set__theme"
+                  :class="{ 'reader-set__theme--active': reader.settings.theme === theme.key }"
+                  :style="{ background: theme.color }"
+                  type="button"
+                  @click="reader.setTheme(theme.key)"
+                >
+                  {{ theme.label }}
+                </button>
+              </div>
+            </div>
 
-          <div class="reader-set__row">
-            <span class="reader-set__label">背景</span>
-            <div class="reader-set__themes">
-              <button
-                v-for="theme in themes"
-                :key="theme.key"
-                class="reader-set__theme"
-                :class="{ 'reader-set__theme--active': reader.settings.theme === theme.key }"
-                :style="{ background: theme.color }"
-                type="button"
-                @click="reader.setTheme(theme.key)"
-              >
-                {{ theme.label }}
-              </button>
+            <div class="reader-set__preview">
+              <p class="reader-set__preview-label">预览效果</p>
+              <p class="reader-set__preview-text">
+                　　少年提剑下山，山门在身后缓缓合上。他知道，这一走，未必还能回来。
+                江湖上的消息总比风跑得快，三天之内，半个中原都知道了那个名字。
+              </p>
             </div>
           </div>
-
-          <div class="reader-set__preview">
-            <p class="reader-set__preview-label">预览效果</p>
-            <p class="reader-set__preview-text">
-              　　少年提剑下山，山门在身后缓缓合上。他知道，这一走，未必还能回来。
-              江湖上的消息总比风跑得快，三天之内，半个中原都知道了那个名字。
-            </p>
-          </div>
         </div>
-      </el-tab-pane>
 
-      <el-tab-pane label="阅读记录" name="history">
-        <div v-loading="historyLoading">
+        <!-- 阅读记录 -->
+        <div v-else-if="tab === 'history'" v-loading="historyLoading" class="pane">
           <EmptyState
             v-if="!historyLoading && !historyList.length"
             text="还没有阅读记录"
             action-text="去首页看看"
             to="/"
           />
-          <ul v-else class="history">
-            <li v-for="item in historyList" :key="item.book.id" class="history__item">
-              <router-link class="history__cover" :to="`/book/${item.book.id}`">
+          <ul v-else class="rowlist">
+            <li v-for="item in historyList" :key="item.book.id" class="rowlist__item">
+              <router-link class="rowlist__thumb" :to="`/book/${item.book.id}`">
                 {{ item.book.title.slice(0, 2) }}
               </router-link>
-              <div class="history__main">
-                <router-link class="history__title" :to="`/book/${item.book.id}`">
+              <div class="rowlist__main">
+                <router-link class="rowlist__title" :to="`/book/${item.book.id}`">
                   {{ item.book.title }}
                 </router-link>
-                <p class="history__meta">
+                <p class="rowlist__meta">
                   读到 第 {{ item.chapter.chapter_no }} 章 · {{ item.progress }}% ·
                   {{ item.updated_at }}
                 </p>
@@ -340,31 +503,35 @@ onMounted(async () => {
             </li>
           </ul>
         </div>
-      </el-tab-pane>
 
-      <el-tab-pane label="我的评论" name="comments">
-        <div v-loading="commentLoading">
+        <!-- 我的书评 -->
+        <div v-else-if="tab === 'comments'" v-loading="commentLoading" class="pane">
           <EmptyState
             v-if="!commentLoading && !commentList.length"
-            text="还没有发表过评论"
+            text="还没有发表过书评"
             action-text="去逛逛"
             to="/"
           />
-          <ul v-else class="comments">
-            <li v-for="item in commentList" :key="item.id" class="comments__item">
-              <div class="comments__top">
-                <router-link class="comments__where" :to="`/book/${item.book_id}`">
+          <ul v-else class="rowlist">
+            <li v-for="item in commentList" :key="item.id" class="rowlist__item rowlist__item--col">
+              <div class="rowlist__top">
+                <router-link class="rowlist__where" :to="`/book/${item.book_id}`">
                   {{ item.book_title }}
                 </router-link>
-                <span v-if="item.chapter_title" class="comments__chapter">
+                <span v-if="item.chapter_title" class="rowlist__chapter">
                   · {{ item.chapter_title }}
                 </span>
                 <el-tag v-if="item.status === 2" type="info" size="small">已隐藏</el-tag>
-                <span class="comments__time">{{ item.created_at }}</span>
+                <span class="rowlist__time">{{ item.created_at }}</span>
               </div>
-              <p class="comments__text">{{ item.content }}</p>
-              <div class="comments__ops">
-                <el-button v-if="item.status !== 2" link type="danger" @click="removeComment(item)">
+              <p class="rowlist__text">{{ item.content }}</p>
+              <div class="rowlist__ops">
+                <el-button
+                  v-if="item.status !== 2"
+                  link
+                  type="danger"
+                  @click="removeComment(item)"
+                >
                   删除
                 </el-button>
               </div>
@@ -373,7 +540,7 @@ onMounted(async () => {
 
           <el-pagination
             v-if="commentTotal > commentSize"
-            class="comments__pager"
+            class="pager"
             layout="prev, pager, next"
             :total="commentTotal"
             :page-size="commentSize"
@@ -381,300 +548,512 @@ onMounted(async () => {
             @current-change="(p) => { commentPage = p; loadComments() }"
           />
         </div>
-      </el-tab-pane>
-    </el-tabs>
+      </main>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.user {
-  padding-top: 28px;
-  padding-bottom: 48px;
+.uc {
+  padding: 18px 0 48px;
 }
 
-.user__hero {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 24px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-lg);
-  margin-bottom: 12px;
-}
-
-.user__avatar {
+/* ---------------- 顶部头图 ---------------- */
+.hero {
   position: relative;
-  width: 72px;
-  height: 72px;
+  padding: 30px 0 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #2c2431 0%, #201b26 52%, #2d2333 100%);
+  text-align: center;
+  color: #fff;
+  overflow: visible;
+}
+
+/* 细点阵纹理，替代猫站的猫爪暗纹 */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 18px 18px;
+  pointer-events: none;
+}
+
+.hero__name {
+  position: relative;
+  margin: 0;
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.hero__sub {
+  position: relative;
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.hero__btns {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.hero__btn {
+  min-width: 104px;
+  height: 34px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.hero__btn--primary {
+  border: 1px solid var(--c-primary);
+  background: var(--c-primary);
+  color: #fff;
+}
+
+.hero__btn--primary:hover {
+  filter: brightness(1.06);
+}
+
+.hero__btn--ghost {
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: transparent;
+  color: #fff;
+}
+
+.hero__btn--ghost:hover {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hero__stats {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.stat {
+  width: 118px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.stat__num {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.stat__label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.stat:hover .stat__label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.hero__avatar {
+  position: absolute;
+  left: 50%;
+  bottom: -44px;
+  width: 88px;
+  height: 88px;
+  margin-left: -44px;
+  border: 3px solid #fff;
   border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
   overflow: hidden;
   cursor: pointer;
-  background: linear-gradient(135deg, var(--c-primary), #d93e73);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
 
-.user__avatar input {
+.hero__avatar input {
   display: none;
 }
 
-.user__avatar img {
+.hero__avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.user__avatar-text {
-  font-size: 26px;
+.hero__avatar-text {
+  font-size: 30px;
+  color: var(--c-primary);
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
 }
 
-.user__avatar-mask {
+.hero__avatar-mask {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
+  inset: auto 0 0;
+  height: 26px;
+  background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 26px;
   opacity: 0;
-  transition: opacity 0.16s ease;
+  transition: opacity 0.15s ease;
 }
 
-.user__avatar:hover .user__avatar-mask {
+.hero__avatar:hover .hero__avatar-mask {
   opacity: 1;
 }
 
-.user__intro {
-  min-width: 0;
+/* ---------------- 主体：左导航 + 内容 ---------------- */
+.uc__body {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 58px;
 }
 
-.user__name {
-  margin: 0 0 6px;
-  font-size: 20px;
+.side {
+  width: 196px;
+  flex-shrink: 0;
+}
+
+.side__nav {
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+}
+
+.side__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 46px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 14px;
+  color: #5a5560;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.side__item:hover {
+  background: #faf7f9;
+  color: var(--c-text);
+}
+
+.side__item--on {
+  background: #fff4f8;
+  color: var(--c-primary);
   font-weight: 600;
 }
 
-.user__meta {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--c-text-muted);
-  flex-wrap: wrap;
-}
-
-.user__bio {
-  margin: 8px 0 0;
-  font-size: 13px;
-  color: var(--c-text-secondary);
-}
-
-.user__tabs :deep(.el-tabs__item) {
+.side__ico {
+  width: 18px;
+  text-align: center;
   font-size: 14px;
 }
 
-.user__form {
-  max-width: 460px;
-  margin-top: 16px;
+.side__recent {
+  margin-top: 14px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
 }
 
-.user__info {
-  margin-top: 8px;
-  max-width: 720px;
+.side__recent-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--c-text);
 }
 
-.user__hint {
+.side__recent-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.side__recent-list li {
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px dashed var(--c-border);
+}
+
+.side__recent-list li:last-child {
+  border-bottom: none;
+}
+
+.side__recent-list a {
+  color: var(--c-text-secondary);
+  text-decoration: none;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side__recent-list a:hover {
+  color: var(--c-primary);
+}
+
+.side__recent-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--c-text-muted);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 24px 28px;
+  background: #fff;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+}
+
+.main__title {
+  margin: 0 0 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--c-border);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--c-text);
+}
+
+.pane {
+  min-height: 200px;
+}
+
+.form {
+  max-width: 520px;
+}
+
+.desc {
+  margin-top: 22px;
+}
+
+.hint {
   margin-left: 12px;
   font-size: 12px;
   color: var(--c-text-muted);
 }
 
+/* ---------------- 列表（阅读记录 / 书评）---------------- */
+.rowlist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rowlist__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.rowlist__item:last-child {
+  border-bottom: none;
+}
+
+.rowlist__item--col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.rowlist__thumb {
+  width: 44px;
+  height: 58px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: linear-gradient(140deg, #f3a6bd, #d9718f);
+  color: #fff;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.rowlist__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowlist__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+  text-decoration: none;
+}
+
+.rowlist__title:hover {
+  color: var(--c-primary);
+}
+
+.rowlist__meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
+
+.rowlist__top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rowlist__where {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+  text-decoration: none;
+}
+
+.rowlist__where:hover {
+  color: var(--c-primary);
+}
+
+.rowlist__chapter,
+.rowlist__time {
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
+
+.rowlist__time {
+  margin-left: auto;
+}
+
+.rowlist__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--c-text-secondary);
+}
+
+.rowlist__ops {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pager {
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+/* ---------------- 阅读设置 ---------------- */
 .reader-set {
   max-width: 560px;
-  margin-top: 16px;
 }
 
 .reader-set__row {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 18px;
+  padding: 14px 0;
+  border-bottom: 1px dashed var(--c-border);
 }
 
 .reader-set__label {
   width: 44px;
+  flex-shrink: 0;
   font-size: 13px;
   color: var(--c-text-secondary);
-  flex-shrink: 0;
 }
 
-.reader-set__row .el-slider {
+.reader-set__row :deep(.el-slider) {
   flex: 1;
 }
 
 .reader-set__value {
-  width: 54px;
+  width: 52px;
   text-align: right;
   font-size: 13px;
-  color: var(--c-text-muted);
+  color: var(--c-primary);
 }
 
 .reader-set__themes {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .reader-set__theme {
-  width: 60px;
-  height: 34px;
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm);
+  width: 56px;
+  height: 32px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 4px;
   font-size: 12px;
-  color: #666;
+  color: #555;
+  cursor: pointer;
 }
 
 .reader-set__theme--active {
-  outline: 2px solid var(--c-accent);
-  outline-offset: 1px;
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 2px rgba(242, 79, 134, 0.14);
+  color: var(--c-primary);
+  font-weight: 600;
 }
 
 .reader-set__preview {
-  margin-top: 8px;
-  padding: 18px 20px;
-  border-radius: var(--radius-md);
-  background: var(--reader-bg);
-  border: 1px solid var(--reader-border);
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fafafa;
+  border: 1px dashed var(--c-border-strong);
 }
 
 .reader-set__preview-label {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-size: 12px;
-  color: #a8a39a;
+  color: var(--c-text-muted);
 }
 
 .reader-set__preview-text {
   margin: 0;
-  font-family: 'Songti SC', 'Noto Serif SC', 'SimSun', serif;
-  font-size: var(--reader-font-size);
-  line-height: var(--reader-line-height);
-  color: var(--reader-text);
-}
-
-.history {
-  margin: 16px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.history__item {
-  display: grid;
-  grid-template-columns: 48px 1fr auto;
-  align-items: center;
-  gap: 16px;
-  padding: 14px 18px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-md);
-}
-
-.history__cover {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 64px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--c-primary), #d93e73);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 13px;
-  font-weight: 600;
-  font-family: 'Songti SC', 'Noto Serif SC', serif;
-}
-
-.history__title {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.history__title:hover {
-  color: var(--c-primary);
-}
-
-.history__meta {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--c-text-muted);
-}
-
-.comments {
-  margin: 16px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.comments__item {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--c-border);
-}
-
-.comments__top {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.comments__where {
   font-size: 14px;
-  font-weight: 600;
-  color: var(--c-primary);
-}
-
-.comments__chapter {
-  font-size: 12px;
-  color: var(--c-text-muted);
-}
-
-.comments__time {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--c-text-muted);
-}
-
-.comments__text {
-  margin: 8px 0 0;
-  font-size: 14px;
-  line-height: 1.75;
+  line-height: 1.9;
   color: var(--c-text-secondary);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
-.comments__ops {
-  margin-top: 6px;
-}
-
-.comments__pager {
-  margin-top: 16px;
-  justify-content: flex-end;
-}
-
-@media (max-width: 640px) {
-  .history__item {
-    grid-template-columns: 48px 1fr;
+@media (max-width: 900px) {
+  .uc__body {
+    flex-direction: column;
   }
-  .history__item .btn {
-    grid-column: 1 / -1;
+
+  .side {
+    width: 100%;
+  }
+
+  .side__nav {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .side__item {
+    width: auto;
   }
 }
 </style>
