@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     LOG_LEVEL: str = "INFO"
+    RATE_LIMIT_ENABLED: bool = True
     LOG_DIR: str = "logs"
 
     STATIC_DIR: str = "static"

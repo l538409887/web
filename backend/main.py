@@ -12,6 +12,7 @@ from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logger import setup_logger, trace_id_ctx
+from app.core.ratelimit import rate_limit_middleware
 from app.core.response import ok
 
 setup_logger()
@@ -35,6 +36,14 @@ app.add_middleware(
 )
 
 register_exception_handlers(app)
+
+
+@app.middleware("http")
+async def limit_middleware(request: Request, call_next):
+    """限流 + 基础防爬。注册在 trace 之前，保证 trace 在外层能记录 429。"""
+    if not settings.RATE_LIMIT_ENABLED:
+        return await call_next(request)
+    return await rate_limit_middleware(request, call_next)
 
 
 @app.middleware("http")
