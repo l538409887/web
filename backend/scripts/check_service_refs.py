@@ -12,6 +12,11 @@ import pathlib
 import re
 import sys
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:  # noqa: BLE001
+    pass
+
 BACKEND_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
@@ -45,7 +50,7 @@ def main() -> int:
             print(f"  {item[0]}  ->  {item[1]}.{item[2]}  ({item[3]})")
         return 1
 
-    print("全部存在 ✓")
+    print("全部存在 [OK]")
     return 0
 
 
