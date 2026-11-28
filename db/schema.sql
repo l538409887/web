@@ -7,14 +7,12 @@
 --
 --  【本文件由生产库结构导出生成】
 --    生成命令：mysqldump --no-data --compact --skip-add-drop-table novel_platform
---    共 23 张表，包含全部 12 次增量迁移后的最终结构。
---    修改表结构后请重新导出，不要手工编辑——手工维护曾导致
---    「books 表缺少 shelf_status 等迁移列」这种 clone 即报错的问题。
+--    共 23 张表，包含全部增量迁移后的最终结构。
+--    修改表结构后请重新导出，不要手工编辑。
 --
 --  【安全说明】本机同时存在多个项目的数据库，本脚本：
 --    1. 只 CREATE / USE `novel_platform`，全程不执行 DROP DATABASE；
---    2. 所有 DROP TABLE 均写成 `novel_platform`.`表名`，
---       即使默认库选错，也只会在 novel_platform 内生效；
+--    2. 所有 DROP TABLE 均写成 `novel_platform`.`表名`；
 --    3. 不动 information_schema / mysql / 其它任何库。
 -- =============================================================
 
@@ -26,36 +24,31 @@ USE `novel_platform`;
 
 SET NAMES utf8mb4;
 
--- 整个建表过程保持外键检查关闭：表按字母序创建，
--- 子表可能先于父表出现（如 author_follow 先于 sys_user），
--- 此时若打开检查会报 1824 Failed to open the referenced table。
 SET FOREIGN_KEY_CHECKS = 0;
 
--- 全部 23 张表；外键检查已关闭，DROP 顺序不影响结果。
-DROP TABLE IF EXISTS `novel_platform`.`book_daily_stat`;
 DROP TABLE IF EXISTS `novel_platform`.`author_follow`;
-DROP TABLE IF EXISTS `novel_platform`.`user_notice`;
-DROP TABLE IF EXISTS `novel_platform`.`site_notice`;
-DROP TABLE IF EXISTS `novel_platform`.`sensitive_word`;
-DROP TABLE IF EXISTS `novel_platform`.`content_report`;
-DROP TABLE IF EXISTS `novel_platform`.`paragraph_reaction`;
-DROP TABLE IF EXISTS `novel_platform`.`paragraph_comment`;
-DROP TABLE IF EXISTS `novel_platform`.`book_watermelon_log`;
-DROP TABLE IF EXISTS `novel_platform`.`chapter_purchase`;
-DROP TABLE IF EXISTS `novel_platform`.`book_purchase`;
-DROP TABLE IF EXISTS `novel_platform`.`recharge_order`;
-DROP TABLE IF EXISTS `novel_platform`.`user_sign_in`;
-DROP TABLE IF EXISTS `novel_platform`.`book_vote`;
-DROP TABLE IF EXISTS `novel_platform`.`book_comment`;
-DROP TABLE IF EXISTS `novel_platform`.`reading_history`;
-DROP TABLE IF EXISTS `novel_platform`.`user_bookshelf`;
-DROP TABLE IF EXISTS `novel_platform`.`book_chapter`;
-DROP TABLE IF EXISTS `novel_platform`.`book_tag_rel`;
-DROP TABLE IF EXISTS `novel_platform`.`book_tag`;
 DROP TABLE IF EXISTS `novel_platform`.`book`;
 DROP TABLE IF EXISTS `novel_platform`.`book_category`;
+DROP TABLE IF EXISTS `novel_platform`.`book_chapter`;
+DROP TABLE IF EXISTS `novel_platform`.`book_comment`;
+DROP TABLE IF EXISTS `novel_platform`.`book_daily_stat`;
+DROP TABLE IF EXISTS `novel_platform`.`book_purchase`;
+DROP TABLE IF EXISTS `novel_platform`.`book_tag`;
+DROP TABLE IF EXISTS `novel_platform`.`book_tag_rel`;
+DROP TABLE IF EXISTS `novel_platform`.`book_vote`;
+DROP TABLE IF EXISTS `novel_platform`.`book_watermelon_log`;
+DROP TABLE IF EXISTS `novel_platform`.`chapter_purchase`;
+DROP TABLE IF EXISTS `novel_platform`.`content_report`;
+DROP TABLE IF EXISTS `novel_platform`.`paragraph_comment`;
+DROP TABLE IF EXISTS `novel_platform`.`paragraph_reaction`;
+DROP TABLE IF EXISTS `novel_platform`.`reading_history`;
+DROP TABLE IF EXISTS `novel_platform`.`recharge_order`;
+DROP TABLE IF EXISTS `novel_platform`.`sensitive_word`;
+DROP TABLE IF EXISTS `novel_platform`.`site_notice`;
 DROP TABLE IF EXISTS `novel_platform`.`sys_user`;
-
+DROP TABLE IF EXISTS `novel_platform`.`user_bookshelf`;
+DROP TABLE IF EXISTS `novel_platform`.`user_notice`;
+DROP TABLE IF EXISTS `novel_platform`.`user_sign_in`;
 CREATE TABLE `author_follow` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
   `user_id` bigint unsigned NOT NULL COMMENT '关注者',
@@ -81,7 +74,7 @@ CREATE TABLE `book` (
   `chapter_count` int unsigned NOT NULL DEFAULT '0' COMMENT '总章节数（冗余）',
   `click_count` bigint unsigned NOT NULL DEFAULT '0' COMMENT '点击数（冗余，供榜单）',
   `collect_count` int unsigned NOT NULL DEFAULT '0' COMMENT '收藏数（冗余）',
-  `recommend_count` int unsigned NOT NULL DEFAULT '0' COMMENT '推荐票数（冗余）',
+  `recommend_count` int NOT NULL DEFAULT '0' COMMENT '已废弃：历史推荐数，统一用 watermelon_count',
   `score` decimal(3,1) NOT NULL DEFAULT '0.0' COMMENT '评分 0.0~10.0',
   `is_paid` tinyint NOT NULL DEFAULT '0' COMMENT '0免费 1付费',
   `price_coin` int unsigned NOT NULL DEFAULT '0' COMMENT '整本价格（软妹币）',
@@ -397,5 +390,4 @@ CREATE TABLE `user_sign_in` (
   CONSTRAINT `fk_sign_user` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='签到记录表';
 
--- 全部表建完后再打开外键检查（建表期间保持关闭，避免前向引用失败）
 SET FOREIGN_KEY_CHECKS = 1;

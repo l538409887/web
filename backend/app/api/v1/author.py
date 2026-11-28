@@ -104,7 +104,7 @@ def create_chapter(
     db: Session = Depends(get_db),
 ):
     chapter = author_service.create_chapter(
-        db, user, book_id, payload.title, payload.content
+        db, user, book_id, payload.title, payload.content, payload.draft
     )
     logger.bind(business=True).info(
         "CHAPTER_PUBLISH author={} book={} chapter={} words={}",
@@ -113,7 +113,14 @@ def create_chapter(
         chapter.id,
         chapter.word_count,
     )
-    return ok({"id": chapter.id, "chapter_no": chapter.chapter_no})
+    return ok(
+        {
+            "id": chapter.id,
+            "chapter_no": chapter.chapter_no,
+            "title": chapter.title,
+            "audit_status": chapter.audit_status,
+        }
+    )
 
 
 @router.post("/books/{book_id}/chapters/preview", summary="分章预览（不落库）")
@@ -181,6 +188,7 @@ def get_chapter(
             "content": chapter.content,
             "word_count": chapter.word_count,
             "status": chapter.status,
+            "audit_status": chapter.audit_status,
         }
     )
 

@@ -11,6 +11,7 @@ from app.core.state import (
     AUDIT_APPROVED,
     AUDIT_DRAFT,
     AUDIT_PENDING,
+    CHAPTER_DRAFT,
     CHAPTER_PENDING,
     SHELF_OFFLINE,
     SHELF_ONLINE,
@@ -196,20 +197,38 @@ def _next_chapter_no(db: Session, book_id: int) -> int:
     return int(current or 0) + 1
 
 
-def create_chapter(db: Session, user: SysUser, book_id: int, title: str, content: str) -> BookChapter:
+def create_chapter(
+    db: Session,
+    user: SysUser,
+    book_id: int,
+    title: str,
+    content: str,
+    draft: bool = False,
+) -> BookChapter:
+    """新增章节。
+
+    - title 留空时按章节序号生成「第N章」
+    - draft=True 表示暂存为草稿：不校验敏感词，审核状态为草稿，不进审核队列
+    """
     from app.services import moderation_service
 
     _own_book(db, user, book_id)
-    moderation_service.enforce(db, content, "章节正文")
+
+    # 草稿允许先存后改，所以只对提交状态做内容校验
+    if not draft:
+        moderation_service.enforce(db, content, "章节正文")
+
+    chapter_no = _next_chapter_no(db, book_id)
+    final_title = (title or "").strip() or f"第{chapter_no}章"
 
     chapter = BookChapter(
         book_id=book_id,
-        chapter_no=_next_chapter_no(db, book_id),
-        title=title.strip(),
-        content=content.strip(),
-        word_count=count_words(content),
+        chapter_no=chapter_no,
+        title=final_title,
+        content=(content or "").strip(),
+        word_count=count_words(content or ""),
         status=1,
-        audit_status=CHAPTER_PENDING,
+        audit_status=CHAPTER_DRAFT if draft else CHAPTER_PENDING,
     )
     db.add(chapter)
     db.flush()
@@ -221,6 +240,8 @@ def create_chapter(db: Session, user: SysUser, book_id: int, title: str, content
 
 
 def update_chapter(db: Session, user: SysUser, chapter_id: int, payload) -> BookChapter:
+    from app.services import moderation_service
+
     chapter = _own_chapter(db, user, chapter_id)
 
     if payload.title is not None:
@@ -228,6 +249,15 @@ def update_chapter(db: Session, user: SysUser, chapter_id: int, payload) -> Book
     if payload.content is not None:
         chapter.content = payload.content.strip()
         chapter.word_count = count_words(payload.content)
+
+
+    # 草稿提交审核：此时才做敏感词校验
+    action = getattr(payload, "action", None)
+    if action == "submit":
+        moderation_service.enforce(db, chapter.content, "章节正文")
+        chapter.audit_status = CHAPTER_PENDING
+    elif action == "draft":
+        chapter.audit_status = CHAPTER_DRAFT
 
     book_service.recalc_stats(db, chapter.book_id)
     db.commit()

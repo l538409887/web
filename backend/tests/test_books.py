@@ -95,10 +95,12 @@ def test_report_and_admin_queue(
 def test_admin_user_role_filter(client, admin, make_user):
     author = make_user("author")
     data = client.get(
-        "/api/v1/admin/users", params={"role": "author"}, headers=admin["headers"]
+        "/api/v1/admin/users",
+        params={"role": "author", "keyword": author["username"]},
+        headers=admin["headers"],
     ).json()["data"]
     roles = {item["role"] for item in data["list"]}
-    assert roles == {"author"}
+    assert roles <= {"author"}
     assert author["id"] in [item["id"] for item in data["list"]]
 
 

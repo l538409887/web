@@ -212,3 +212,65 @@ def test_author_cannot_submit_other_author_book(client, author, admin, make_book
     book_id = make_book(author)
     resp = client.post(f"/api/v1/author/books/{book_id}/submit", headers=other_headers)
     assert resp.json()["code"] == 6001
+
+# ---------------- 章节默认标题与草稿 ----------------
+
+def test_chapter_default_title(client, author, make_book):
+    """标题留空时自动命名为「第N章」。"""
+    book_id = make_book(author)
+    created = client.post(
+        f"/api/v1/author/books/{book_id}/chapters",
+        json={"title": "", "content": "正文内容"},
+        headers=author["headers"],
+    ).json()["data"]
+
+    assert created["chapter_no"] == 1
+    assert created["title"] == "第1章"
+
+    second = client.post(
+        f"/api/v1/author/books/{book_id}/chapters",
+        json={"title": "风起", "content": "正文"},
+        headers=author["headers"],
+    ).json()["data"]
+    assert second["title"] == "风起"
+
+
+def test_draft_invisible_and_not_in_queue(
+    client, author, admin, make_book, approve_book
+):
+    """草稿不进前台目录，也不出现在审核队列。"""
+    book_id = make_book(author)
+    approve_book(book_id)
+    draft = client.post(
+        f"/api/v1/author/books/{book_id}/chapters",
+        json={"title": "", "content": "写了一半的草稿", "draft": True},
+        headers=author["headers"],
+    ).json()["data"]
+    assert draft["audit_status"] == 0
+
+    assert client.get(f"/api/v1/books/{book_id}/chapters").json()["data"]["total"] == 0
+
+    queue = client.get(
+        "/api/v1/admin/chapters", params={"audit_status": 1}, headers=admin["headers"]
+    ).json()["data"]
+    assert draft["id"] not in [item["id"] for item in queue["list"]]
+
+
+def test_draft_can_be_submitted(client, author, make_book):
+    """草稿可转为提交审核。"""
+    book_id = make_book(author)
+    draft = client.post(
+        f"/api/v1/author/books/{book_id}/chapters",
+        json={"content": "草稿内容", "draft": True},
+        headers=author["headers"],
+    ).json()["data"]
+
+    resp = client.put(
+        f"/api/v1/author/chapters/{draft['id']}",
+        json={"action": "submit"},
+        headers=author["headers"],
+    )
+    assert resp.json()["code"] == 0
+
+    detail = client.get(f"/api/v1/author/chapters/{draft['id']}", headers=author["headers"])
+    assert detail.json()["data"]["audit_status"] == 1
